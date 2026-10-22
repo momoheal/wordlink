@@ -514,6 +514,7 @@
       "zoom": "Zoom",
       "snap": "Magnetic pointer: snaps to nearby words",
       "back": "Back to {word}",
+      "backPlain": "Back",
       "legend": {
         "title": "Familiarity",
         "new": "New",

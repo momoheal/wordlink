@@ -514,6 +514,7 @@
       "zoom": "缩放",
       "snap": "吸附指针：靠近单词时自动吸附",
       "back": "返回 {word}",
+      "backPlain": "返回",
       "legend": {
         "title": "熟悉度",
         "new": "未学",

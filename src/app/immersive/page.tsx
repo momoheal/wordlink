@@ -166,7 +166,7 @@ export default function ImmersivePage() {
                     onNodeClick={handleWordSelect}
                     variant="immersive"
                     inset={rightDock && (showList || showDetail) ? { right: vw - detailPos.x + 16 } : undefined}
-                    onBack={goBack}
+                    onBack={currentIndex > 0 ? goBack : undefined}
                     backTo={currentIndex > 0 ? history[currentIndex - 1] : null}
                 />
             </div>

@@ -38,9 +38,11 @@ interface PanelFissionGraphProps {
     /** "immersive" fills the screen behind floating windows: always dark, with floating controls. */
     variant?: 'panel' | 'immersive';
     inset?: Partial<Insets>;
-    /** Goes back to the previous word (`backTo`), so a word without neighbours is never a dead end. */
+    /** A back control (named after `backTo` when known), so a word without neighbours is never a dead end. */
     onBack?: () => void;
     backTo?: string | null;
+    /** Extra controls at the end of the toolbar. */
+    actions?: React.ReactNode;
 }
 
 // ---------------------------------------------------------------------------
@@ -1115,7 +1117,7 @@ function shortGloss(translation?: string): string {
     return parts.length > 14 ? `${parts.slice(0, 13)}…` : parts;
 }
 
-export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel', inset, onBack, backTo }: PanelFissionGraphProps) {
+export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel', inset, onBack, backTo, actions }: PanelFissionGraphProps) {
     const t = useTranslations('graph');
     const { showHoverTooltip, showGraphTooltip, graphPointerSnap: snapping, updateSettings } = useSettings();
     const { theme } = useTheme();
@@ -1749,6 +1751,7 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
     const shownWords = view ? view.nodes.length - 1 : 0;
     const groupsPresent = RELATION_GROUPS.filter((g) => (totals?.[g] ?? 0) > 0);
     const groupLabel = (g: RelationGroup) => t(`atlas.groups.${g}`);
+    const backLabel = backTo ? t('atlas.back', { word: backTo }) : t('atlas.backPlain');
 
     return (
         <div className={`absolute inset-0 overflow-hidden ${immersive ? '' : 'flex flex-col'}`} style={{ background: palette.bg }}>
@@ -1760,13 +1763,13 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
                     : 'z-20 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-neutral-800 bg-neutral-950/85 px-3 py-2 backdrop-blur-md'}
             >
                 <div className="flex min-w-0 items-center gap-2">
-                    {onBack && backTo && (
+                    {onBack && (
                         <button
                             type="button"
                             onClick={onBack}
-                            title={t('atlas.back', { word: backTo })}
-                            aria-label={t('atlas.back', { word: backTo })}
-                            className="-ml-1 rounded-md p-1 text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-white"
+                            title={backLabel}
+                            aria-label={backLabel}
+                            className="-ml-1 rounded-md p-1 text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-white pointer-coarse:p-2"
                         >
                             <ArrowLeft size={16} />
                         </button>
@@ -1816,13 +1819,15 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
                     >
                         {t('atlas.secondDegree')}
                     </button>
+                    {actions}
                 </div>
             </div>
 
             <div
                 ref={attachGraphArea}
                 // With snapping on, the canvas draws its own pointer (see "Pointer" above), so the system one hides over it.
-                className={`${immersive ? 'absolute inset-0' : 'relative min-h-0 flex-1'} ${snapping ? '[&_canvas]:cursor-none' : ''}`}
+                // Panning and pinching belong to the graph, not to page scrolling.
+                className={`${immersive ? 'absolute inset-0' : 'relative min-h-0 flex-1'} touch-none ${snapping ? '[&_canvas]:cursor-none' : ''}`}
                 // Hover and clicks are resolved here, from where words are drawn right now: force-graph
                 // hit-tests against a picture of the graph it refreshes only every 800 ms, which misses (or
                 // mistakes) words that are moving. Hover follows the pointer, never words sliding under it.
@@ -1934,14 +1939,14 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
                 {!loading && atlas && atlas.nodes.length <= 1 && (
                     <div data-empty className="absolute left-0 top-0 z-10 flex w-max max-w-72 flex-col items-center gap-3 text-center" style={{ visibility: 'hidden' }}>
                         <p className="text-sm text-neutral-500">{t('atlas.empty')}</p>
-                        {onBack && backTo && (
+                        {onBack && (
                             <button
                                 type="button"
                                 onClick={onBack}
-                                className="inline-flex items-center gap-1.5 rounded-full border border-neutral-700 bg-neutral-950/80 px-3 py-1.5 text-xs text-neutral-200 transition-colors hover:border-neutral-500 hover:bg-neutral-900"
+                                className="inline-flex items-center gap-1.5 rounded-full border border-neutral-700 bg-neutral-950/80 px-3 py-1.5 text-xs text-neutral-200 transition-colors hover:border-neutral-500 hover:bg-neutral-900 pointer-coarse:px-4 pointer-coarse:py-2.5"
                             >
                                 <ArrowLeft size={13} />
-                                {t('atlas.back', { word: backTo })}
+                                {backLabel}
                             </button>
                         )}
                     </div>
@@ -1968,7 +1973,7 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
 
                     {/* Zoom bar */}
                     <div className={`${immersive ? '' : 'absolute bottom-3 right-3'} z-10 flex items-center gap-1 rounded-md border border-neutral-800 bg-neutral-950/85 px-1.5 py-1 text-neutral-400 backdrop-blur`}>
-                        <button type="button" onClick={() => zoomBy(1 / 1.25)} title={t('zoomOut')} aria-label={t('zoomOut')} className="rounded p-1 hover:bg-neutral-800 hover:text-white"><Minus size={14} /></button>
+                        <button type="button" onClick={() => zoomBy(1 / 1.25)} title={t('zoomOut')} aria-label={t('zoomOut')} className="rounded p-1 hover:bg-neutral-800 hover:text-white pointer-coarse:p-2"><Minus size={14} /></button>
                         <input
                             ref={zoomSliderRef}
                             type="range"
@@ -1984,7 +1989,7 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
                             aria-label={t('atlas.zoom')}
                             className="hidden h-1 w-20 cursor-pointer accent-emerald-500 md:block"
                         />
-                        <button type="button" onClick={() => zoomBy(1.25)} title={t('zoomIn')} aria-label={t('zoomIn')} className="rounded p-1 hover:bg-neutral-800 hover:text-white"><Plus size={14} /></button>
+                        <button type="button" onClick={() => zoomBy(1.25)} title={t('zoomIn')} aria-label={t('zoomIn')} className="rounded p-1 hover:bg-neutral-800 hover:text-white pointer-coarse:p-2"><Plus size={14} /></button>
                         <span ref={zoomLabelRef} className="w-9 text-center text-[10px] tabular-nums">100%</span>
                         <button
                             type="button"
@@ -1992,12 +1997,12 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
                             onClick={() => updateSettings({ graphPointerSnap: !snapping })}
                             title={t('atlas.snap')}
                             aria-label={t('atlas.snap')}
-                            className={`rounded p-1 hover:bg-neutral-800 ${snapping ? 'text-emerald-400 hover:text-emerald-300' : 'hover:text-white'}`}
+                            className={`rounded p-1 hover:bg-neutral-800 pointer-coarse:p-2 ${snapping ? 'text-emerald-400 hover:text-emerald-300' : 'hover:text-white'}`}
                         >
                             <Magnet size={14} />
                         </button>
-                        <button type="button" onClick={() => fit()} title={t('atlas.fit')} aria-label={t('atlas.fit')} className="rounded p-1 hover:bg-neutral-800 hover:text-white"><Maximize size={14} /></button>
-                        <button type="button" onClick={relayout} title={t('atlas.relayout')} aria-label={t('atlas.relayout')} className="rounded p-1 hover:bg-neutral-800 hover:text-white"><RotateCcw size={14} /></button>
+                        <button type="button" onClick={() => fit()} title={t('atlas.fit')} aria-label={t('atlas.fit')} className="rounded p-1 hover:bg-neutral-800 hover:text-white pointer-coarse:p-2"><Maximize size={14} /></button>
+                        <button type="button" onClick={relayout} title={t('atlas.relayout')} aria-label={t('atlas.relayout')} className="rounded p-1 hover:bg-neutral-800 hover:text-white pointer-coarse:p-2"><RotateCcw size={14} /></button>
                     </div>
                 </div>
 

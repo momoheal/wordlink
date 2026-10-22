@@ -276,7 +276,7 @@ function ThreeColumnLayoutContent() {
                         <PanelFissionGraph
                             word={selectedWord}
                             onNodeClick={handleSelectWord}
-                            onBack={handleBack}
+                            onBack={currentIndex > 0 ? handleBack : undefined}
                             backTo={currentIndex > 0 ? history[currentIndex - 1] : null}
                         />
                     </Panel>

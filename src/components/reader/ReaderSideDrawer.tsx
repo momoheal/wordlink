@@ -322,10 +322,10 @@ export default function ReaderSideDrawer({
                                                 if (word) setTrail({ start: initialWord, words: [...steps, word] });
                                                 setWord(nextWord);
                                             }}
-                                            onBack={() => {
+                                            onBack={steps.length ? () => {
                                                 setWord(steps[steps.length - 1]);
                                                 setTrail({ start: initialWord, words: steps.slice(0, -1) });
-                                            }}
+                                            } : undefined}
                                             backTo={steps[steps.length - 1] ?? null}
                                         />
                                     </div>

@@ -28,21 +28,7 @@
       "backToDashboard": "返回学习面板"
     },
     "graphPage": {
-      "loadingGraph": "正在加载图谱...",
-      "goBack": "返回",
-      "settings": "设置",
-      "connections": "关联释义",
-      "typeLabel": "类型 {num}",
-      "graphSettings": "图谱设置",
-      "l1Size": "一级节点大小",
-      "l2Size": "二级节点大小",
-      "l1Font": "一级字号",
-      "l2Font": "二级字号",
-      "resetDefaults": "恢复默认",
-      "refresh": "刷新",
-      "zoomIn": "放大",
-      "zoomOut": "缩小",
-      "fit": "适配屏幕"
+      "details": "详情"
     },
     "container": {
       "minimize": "最小化",

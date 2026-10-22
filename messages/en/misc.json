@@ -28,21 +28,7 @@
       "backToDashboard": "Back to Dashboard"
     },
     "graphPage": {
-      "loadingGraph": "Loading graph...",
-      "goBack": "Go back",
-      "settings": "Settings",
-      "connections": "Connections",
-      "typeLabel": "Type {num}",
-      "graphSettings": "Graph Settings",
-      "l1Size": "L1 Size",
-      "l2Size": "L2 Size",
-      "l1Font": "L1 Font",
-      "l2Font": "L2 Font",
-      "resetDefaults": "Reset to Defaults",
-      "refresh": "Refresh",
-      "zoomIn": "Zoom+",
-      "zoomOut": "Zoom-",
-      "fit": "Fit"
+      "details": "Details"
     },
     "container": {
       "minimize": "Minimize",
