@@ -1,181 +1,180 @@
 <div align="center">
 
-# 🌌 WordLink — Lexiverse 语宙
+# WordLink
 
-**AI-powered vocabulary learning. A fine-tuned 1.5B model that runs offline in your browser.**
+**See every English word together with its neighbours.**
 
+An open-source vocabulary workspace built on a graph of **326k typed word links**: synonyms, near-synonyms,
+word families and look-alike spellings, all mined from open dictionaries. Quizzes, graded reading and an AI tutor
+sit on top of the graph. The repo also contains the complete SFT + DPO pipeline and benchmark for
+**WordLink-Edge**, a 1.5B model fine-tuned to write your review words into graded stories.
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Next.js 16](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org)
 [![React 19](https://img.shields.io/badge/React-19-61dafb)](https://react.dev)
-[![Model](https://img.shields.io/badge/Model-Qwen2.5--1.5B-8b5cf6)](https://github.com/QwenLM/Qwen2.5)
-[![Training](https://img.shields.io/badge/Training-SFT_%2B_DPO-22c55e)](docs/模型训练详细报告.md)
-[![Weights](https://img.shields.io/badge/Weights-ModelScope-624aff)](https://modelscope.cn/models/OrionSheep/wordlink-lexiconstrain)
+[![Weights on ModelScope](https://img.shields.io/badge/weights-ModelScope-624aff)](https://modelscope.cn/models/OrionSheep/wordlink-lexiconstrain)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
 
-*Stunning cognitive topology. Blazing retention. Built for SDG 4.*
-
-### [🚀 Live Demo · wordlink.lifeplayertribe.com](https://wordlink.lifeplayertribe.com)
-
-Demo account: `demo@wordlink.test` / `Demo2026!`
-
-[Features](#-features) · [Benchmarks](#-measured-results) · [Architecture](#-how-it-works) · [Quick Start](#-quick-start) · [Weights](#-pretrained-weights-modelscope) · [中文简介](#-中文简介)
+[Live demo](https://wordlink.lifeplayertribe.com) · [Features](#features) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Model](#the-model-wordlink-edge) · [Roadmap](#roadmap) · [中文](README.zh-CN.md)
 
 </div>
 
-![WordLink 星图工作台](public/images/showcase/study.jpg)
+![WordLink workspace: word list, word detail and the word graph](public/images/showcase/study.jpg)
 
-> ⚡ **No ads. No subscription. Works offline.** The vocabulary model runs *in your browser* via WebGPU — your learning data never leaves your device.
+## Why
 
----
+Most vocabulary apps drill words one at a time. But you remember *abandon* better when you also see
+*desert*, *forsake* and *give up* next to it, and *abandonment*, *abandoned* around it. WordLink puts that
+neighbourhood next to every word you study, so each review also revisits the words around it.
 
-## ✨ Features
+## Features
 
-<table>
-<tr>
-<td width="50%">
+### Word graph
+The right-hand panel of the workspace is a map of the selected word.
 
-### 🪐 星图工作台 · Study Workspace
-Word library, word details and the **fission graph** in a three-column workspace — pick any word and its synonym network unfolds in a force-directed star map.
-
-</td>
-<td width="50%">
-
-### 🧠 AI Quiz · 智能测验
-Choice / spelling / recall modes driven by a memory-strength model. Every answer updates your forgetting curve in real time.
-
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-### 🌍 Contextual Reading · 语境精读
-Graded articles with click-to-define on any word — reading *is* your review session.
-
-</td>
-<td width="50%">
-
-### 🛂 XAI Learning Passport · 学习护照
-An explainable AI narrative of everything you've learned: CEFR positioning, cognitive radar, growth trajectory.
-
-</td>
-</tr>
-</table>
-
-More: **Ambient screensaver listening** (four-season soundscapes synthesized live in Web Audio) · **Cognitive Navigator** (shortest activation path to your target exam) · **My Libraries** (built-in + custom word books) · **中英双语界面** · dark mode.
+- **Colour = relation type.** Toggle synonyms, near-synonyms, antonyms and look-alikes from the toolbar.
+- **Word family as a bubble.** Derivatives and inflections (*reach → reached, reaching, reachable*) sit inside a
+  dashed bubble around the centre word instead of adding more lines.
+- **One sector per relation.** Each group fans out in its own direction with a label such as *Synonyms 10/12 +*;
+  click it to show the rest.
+- **Your progress on the map.** Nodes are filled by how well you know each word: new, seen, weak, learning or
+  mastered.
+- **Second-degree links on demand** (press <kbd>H</kbd>), dashed outlines for words without an entry yet, and
+  short Chinese glosses when you zoom in.
 
 <p align="center">
-  <img src="public/images/showcase/immersive.jpg" width="49%" alt="Immersive mode">
-  <img src="public/images/showcase/navigator.jpg" width="49%" alt="Cognitive Navigator">
+  <img src="public/images/showcase/graph-light.jpg" width="40%" alt="Word graph, light theme">
+  <img src="public/images/showcase/graph-dark.jpg" width="40%" alt="Word graph, dark theme">
 </p>
+
+### Around the graph
+- **Quizzes**: multiple choice, spelling and recall. Every answer updates a per-word memory state that decides
+  when the word comes back.
+- **Graded reading**: articles with click-to-define on every word and the graph in a side drawer.
+- **Ambient mode**: a full-screen word stream with four seasonal soundscapes, synthesized live with Web Audio.
+- **Also**: learning passport (a report of what you have studied), navigator (a path through the graph to a
+  target word), custom word books from CSV, AI tutor chat, English/Chinese interface, light and dark themes.
+
 <p align="center">
-  <img src="public/images/showcase/dashboard.jpg" width="49%" alt="Dashboard">
-  <img src="public/images/showcase/my-libraries.jpg" width="49%" alt="My Libraries">
+  <img src="public/images/showcase/workspace-light.jpg" width="80%" alt="Light theme">
 </p>
 
----
+## Quick start
 
-## 📊 Measured Results
-
-All numbers are **real measurements** from our 90-question benchmark (greedy decoding) — target-word injection into CEFR-constrained stories, scored on real model outputs. Full report: [`outputs/eval/BENCHMARK_RESULTS.md`](outputs/eval/BENCHMARK_RESULTS.md).
-
-| Model | Target-word hit ↑ | CEFR violation ↓ | JSON compliance ↑ | FKGL |
-|---|---:|---:|---:|---:|
-| Qwen2.5-1.5B-Instruct (before fine-tuning) | 63.06% | 0.17% | 82.22% | 13.5 |
-| **+ SFT** (2,045 diverse stories) | **88.06%** | **0.01%** | **100%** | **9.8** |
-| **+ DPO** (real-failure negatives) | 87.78% | **0.01%** | **100%** | 9.9 |
-| Qwen2.5-7B-Instruct (zero-shot) | 39.72% | 0.07% | **0%** | — |
-| DeepSeek-V3 zero-shot (teacher) | 97.78% | 0.01% | 100% | 10.4 |
-| Teacher / Oracle upper bound | 98.33% | 0.22% | 100% | — |
-
-> 💡 Fine-tuning the small model: **+25pp on the same 1.5B**, matching the teacher's upper bound — while a *larger* model without fine-tuning collapses (39.72% hit, 0% valid JSON). Constraint-following is trained, not bought with parameters.
-
----
-
-## 🏗 How It Works
-
-**Neuro-symbolic architecture** — algorithms handle scheduling, neural models handle generation:
-
-```
-┌───────────────────────────┐        ┌───────────────────────────────┐
-│  Symbolic Engine (确定性)  │        │  Neural Engine (生成)          │
-│  · FSRS-6 forgetting curve │        │  · Edge 1.5B (browser, WebGPU) │
-│  · Levenshtein scoring     │  ⇄     │  · CEFR-constrained stories    │
-│  · RME word matching       │        │  · Real-failure DPO negatives  │
-└───────────────────────────┘        └───────────────────────────────┘
-      │ free · explainable · offline         │ infinite · personal
-      ▼                                      ▼
-  "算法管调度 —— 每毫秒、可解释"        "AI 管生成 —— 把复习词写进今天的故事"
-```
-
-The loop: **FSRS computes what you should review tomorrow → the fine-tuned model writes it into today's story → reading the story surfaces new words → your memory model updates.**
-
-Training pipeline: `Data factory (generate + 5-gate filter) → SFT → DPO (real-failure negatives) → Auto-benchmark → 4-bit edge export` — full report in [`docs/模型训练详细报告.md`](docs/模型训练详细报告.md).
-
----
-
-## 🚀 Quick Start
+Requirements: Node.js 20+, Docker.
 
 ```bash
-# 1. Prerequisites: Node.js ≥ 20, Docker
 git clone https://github.com/orionsheep/wordlink.git
 cd wordlink
 npm install
 
-# 2. Start PostgreSQL (business data)
-docker compose up -d
+docker compose up -d                 # PostgreSQL on localhost:5432
+cp .env.example .env.local           # then edit, see below
+npx prisma migrate deploy            # create the tables
+npm run migrate                      # load the dictionaries in data/ (takes a while)
+npm run import-edges                 # load the 326k typed word links used by the graph
 
-# 3. Configure environment (see docs/部署与运行指南.md for every variable)
-#    DATABASE_URL is required; auth / AI keys optional
-
-# 4. Run
-npm run dev            # → http://localhost:3000
+npm run dev                          # http://localhost:3000
 ```
 
-> Demo experience: sign in with `demo@wordlink.test / Demo2026!` (pre-loaded with 180 days of learning data), or browse public pages without an account. Full deployment guide: [`docs/部署与运行指南.md`](docs/部署与运行指南.md).
-
-## 🧠 Train Your Own
-
-The complete training pipeline is in [`model_training/`](model_training/):
+Minimal `.env.local`:
 
 ```bash
-python model_training/08_generate_diverse_corpus.py   # data factory (LLM teacher + 5-gate filter)
-python model_training/02_train_sft.py                 # SFT
-python model_training/03_train_dpo.py                 # DPO with real-failure negatives
-python model_training/eval_real.py --backend local    # benchmark
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/english_word_fission_dev?schema=LPT_english"
+DEMO_MODE=true          # no auth server needed: every visitor uses the built-in demo account
 ```
 
-Full report: [`docs/模型训练详细报告.md`](docs/模型训练详细报告.md)
+- **Accounts**: real sign-up and login use [Supabase Auth](https://supabase.com/docs/guides/cli) (`supabase start`
+  locally) — set the three `SUPABASE` variables and turn `DEMO_MODE` off.
+- **AI features** (tutor chat, story generation, passport report) call any OpenAI-compatible endpoint:
+  set `LLM_BASE_URL`, `LLM_MODEL` and an API key (`SILICONFLOW_APIKEY`). Everything else works without one.
+- **Demo data**: `npm run demo-data` gives `demo@wordlink.test` six months of study history.
 
-### 📦 Pretrained weights (ModelScope)
+Full guide (in Chinese): [docs/部署与运行指南.md](docs/部署与运行指南.md).
 
-| Repo | Content |
+## How it works
+
+| Layer | What it is |
 |---|---|
-| [OrionSheep/wordlink-lexiconstrain](https://modelscope.cn/models/OrionSheep/wordlink-lexiconstrain) | **Final model** — SFT+DPO merged weights (5.8 GB) + DPO LoRA adapter + eval artifacts |
-| [OrionSheep/wordlink-edge](https://modelscope.cn/models/OrionSheep/wordlink-edge) | SFT v2 merged weights (5.8 GB) + LoRA adapters (v2 / v1 legacy) + eval artifacts |
-| [OrionSheep/wordlink](https://modelscope.cn/models/OrionSheep/wordlink) | This repository's ModelScope mirror |
+| App | Next.js 16 App Router, React 19, Tailwind CSS 4, next-intl |
+| Data | PostgreSQL via Prisma; word data loaded from `data/` |
+| Graph | `GET /api/fission?word=…` returns the word's neighbours and their neighbours from the `word_relation` table; rendered with `react-force-graph-2d` in `src/components/PanelFissionGraph.tsx` |
+| Memory | each quiz answer moves a word through UNFAMILIAR → FAMILIAR → LEARNED → MASTERED and sets its next review date (`src/lib/memory.ts`) |
+| AI | one OpenAI-compatible gateway (`src/lib/ai/gateway.ts`), prompts in `data/ai_prompts/`, responses cached on disk |
+| Auth | Supabase Auth, or `DEMO_MODE` for a single built-in account |
 
----
+The word links come from open data plus a few mining scripts in [`scripts/`](scripts/README.md):
 
-## 🇨🇳 中文简介
+| Relation | Links | Source |
+|---|---:|---|
+| Inflections | 125,612 | ECDICT word-form codes |
+| Look-alike spellings | 120,946 | longest-common-subsequence score ≥ 0.75, same-family pairs excluded |
+| Synonyms | 87,971 | synonym table in `data/word_fission_data.csv` |
+| Near-synonyms (with usage notes) | 74,008 | "commonly confused" notes in `data/word_chinese/` |
+| Derivatives | 6,221 | derivative links in the dictionary entries |
+| Antonyms | 0 | not collected yet — see the roadmap |
 
-**Lexiverse 语宙** 是一个 AI 驱动的英语词汇学习平台：自己微调的 1.5B 模型直接运行在浏览器中（WebGPU 4-bit 量化，~950MB 首次下载后永久离线），把你的到期复习词实时写进今天阅读的故事里。遗忘调度由可解释的 FSRS-6 数学引擎完成，推理零边际成本，学生数据永不出浏览器。核心实测：微调后生词注入命中 88.06%、JSON 合规 100%、CEFR 越界 0.01%。
+## The model: WordLink-Edge
 
-## 📁 Repository Map
+WordLink-Edge is **Qwen2.5-1.5B-Instruct fine-tuned with SFT + DPO** for one job: write a short story at a given
+CEFR level that uses a given list of target words, returned as JSON. The pipeline in
+[`model_training/`](model_training/) covers data generation with a teacher model and five filters, SFT, DPO on
+real failure cases, and the benchmark.
+
+Measured on a 90-question benchmark with greedy decoding ([full report](outputs/eval/BENCHMARK_RESULTS.md)):
+
+| Model | Target-word hit ↑ | CEFR violations ↓ | Valid JSON ↑ |
+|---|---:|---:|---:|
+| Qwen2.5-1.5B-Instruct, before fine-tuning | 63.06% | 0.17% | 82.22% |
+| **+ SFT** (2,045 stories) | **88.06%** | **0.01%** | **100%** |
+| **+ DPO** (real failure negatives) | 87.78% | **0.01%** | **100%** |
+| Qwen2.5-7B-Instruct, zero-shot | 39.72% | 0.07% | 0% |
+| DeepSeek-V3, zero-shot (teacher) | 97.78% | 0.01% | 100% |
+
+Fine-tuning adds 25 points on the same 1.5B model, while a 7B model without fine-tuning fails the format entirely.
+
+Weights: [OrionSheep/wordlink-lexiconstrain](https://modelscope.cn/models/OrionSheep/wordlink-lexiconstrain)
+(SFT + DPO merged) and [OrionSheep/wordlink-edge](https://modelscope.cn/models/OrionSheep/wordlink-edge) (SFT).
+
+> **Status.** The model is trained and benchmarked, but the web app does not run it yet: its AI features call
+> an OpenAI-compatible API. Running WordLink-Edge in the browser with WebGPU is on the roadmap.
+
+## Roadmap
+
+- [ ] Antonym links (Open English WordNet)
+- [ ] Run WordLink-Edge in the browser (WebGPU, 4-bit)
+- [ ] Schedule reviews with the FSRS-6 implementation already in `src/lib/reader-engine/fsrs.ts`
+- [ ] Sense-level links: which meaning of a word a synonym belongs to
+- [ ] Tabs and split view in the workspace
+- [ ] Clear the remaining ESLint errors
+
+Ideas and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Repository map
 
 ```
-├── src/app/            # Next.js App Router pages & API routes
-├── src/components/     # UI components (welcome landing, study workspace, ambient…)
-├── model_training/     # SFT / DPO / corpus factory / benchmark scripts
-├── data/               # word libraries & training corpora (jsonl)
-├── outputs/eval/       # benchmark metrics & per-question predictions
-├── docs/               # training report, deployment guide, media specs
-└── public/             # images & demo videos
+src/app/            pages and API routes
+src/components/     UI (workspace, graph, word modules, ambient mode, …)
+src/lib/            data access, memory model, AI gateway, reader engine
+prisma/             schema and migrations
+data/               dictionaries, word links, word lists, AI prompts, training corpora
+model_training/     SFT / DPO / corpus / benchmark scripts
+outputs/eval/       benchmark metrics and per-question predictions
+scripts/            data import and maintenance tools
+docs/               deployment guide, training report
 ```
 
----
+## License and data
 
-<div align="center">
+Code: [MIT](LICENSE). `data/` bundles lexical resources from other projects, including
+[ECDICT](https://github.com/skywind3000/ECDICT) (MIT); check each source's terms before reusing the data on its
+own. Model weights follow the [Qwen2.5 license](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct).
 
-**Built for [UNU Macau · AI for SDGs 2026](https://unu.edu/macau)** — AI for Education (SDG 4)
+## Acknowledgements
 
-*Stunning cognitive topology. Blazing retention.*
+- [ECDICT](https://github.com/skywind3000/ECDICT) for phonetics, translations and word forms
+- [Qwen2.5](https://github.com/QwenLM/Qwen2.5) as the base model
+- The graph's relation chips, word-family bubbles and familiarity colours were inspired by
+  词汇星图 in [HytidelLegend/ai-aug-edu](https://github.com/HytidelLegend/ai-aug-edu)
 
-</div>
+Built for [UNU Macau · AI for SDGs 2026](https://unu.edu/macau), AI for Education (SDG 4).
