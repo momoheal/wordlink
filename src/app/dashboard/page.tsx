@@ -29,6 +29,23 @@ interface CheckinData {
 }
 
 import { useSettings } from '@/context/SettingsContext';
+import { useTheme } from '@/context/ThemeContext';
+
+// 打卡日历的格子：下标 0 = 当天没学，1–4 = 学习量从少到多（按本月最多的一天分四档）。
+// 浅色主题的调色板会把绿色色阶上下镜像，低档反而比空格子还浅，所以两套主题各配一组；
+// 日期数字的颜色跟着格子深浅换，每一档都看得清。
+const CHECKIN_HEAT = {
+    dark: {
+        cells: ['#1a1a1a', '#14532d', '#15803d', '#16a34a', '#22c55e'],
+        digits: ['#737373', '#ffffff', '#ffffff', '#052e16', '#052e16'],
+        todayRing: 'rgba(255,255,255,0.5)',
+    },
+    light: {
+        cells: ['#e7e3d8', '#22c55e', '#16a34a', '#15803d', '#166534'],
+        digits: ['#5b665f', '#052e16', '#052e16', '#ffffff', '#ffffff'],
+        todayRing: 'rgba(22,29,25,0.6)',
+    },
+} as const;
 
 export default function DashboardPage() {
     const { groupSize, dashboardPageSize, updateSettings } = useSettings();
@@ -37,6 +54,7 @@ export default function DashboardPage() {
     const isMobile = deviceType === 'mobile' || forceMobileLayout;
     const t = useTranslations();
     const locale = useLocale();
+    const { theme } = useTheme();
     const dateLocale = locale === 'zh' ? 'zh-CN' : 'en-US';
     // 周一为第一列（与下方 offset 计算一致），narrow 单字符适配小格子
     const weekdayLabels = Array.from({ length: 7 }, (_, i) =>
@@ -270,6 +288,7 @@ export default function DashboardPage() {
                     const maxMonthCount = Math.max(1, ...checkinData.monthly.map(x => x.count));
                     const maxWeekCount = Math.max(1, ...checkinData.weekly.map(x => x.count));
                     const offset = (new Date(year, month, 1).getDay() + 6) % 7;
+                    const heat = CHECKIN_HEAT[theme];
 
                     return (
                         <div className="bg-neutral-950 border border-neutral-800 rounded-xl mb-6">
@@ -314,17 +333,17 @@ export default function DashboardPage() {
                                             {monthDays.map(date => {
                                                 const count = monthMap[date] || 0;
                                                 const intensity = count === 0 ? 0 : Math.min(4, Math.ceil((count / maxMonthCount) * 4));
-                                                const bg = ['#1a1a1a', '#052e16', '#14532d', '#166534', '#16a34a'][intensity];
+                                                const bg = heat.cells[intensity];
                                                 const isToday = date === checkinData.today.date;
                                                 const day = parseInt(date.split('-')[2]);
                                                 return (
                                                     <div
                                                         key={date}
                                                         title={`${date}: ${count} ${t('dashboard.wordsUnit')}`}
-                                                        style={{ height: 36, background: bg, borderRadius: 6, outline: isToday ? '1px solid rgba(255,255,255,0.3)' : 'none' }}
+                                                        style={{ height: 36, background: bg, borderRadius: 6, outline: isToday ? `1px solid ${heat.todayRing}` : 'none', outlineOffset: 1 }}
                                                         className="flex items-center justify-center"
                                                     >
-                                                        <span style={{ fontSize: 11, color: count > 0 ? 'rgba(255,255,255,0.7)' : '#404040' }}>{day}</span>
+                                                        <span style={{ fontSize: 11, color: heat.digits[intensity] }}>{day}</span>
                                                     </div>
                                                 );
                                             })}
@@ -341,17 +360,17 @@ export default function DashboardPage() {
                                             {monthDays.map(date => {
                                                 const count = monthMap[date] || 0;
                                                 const intensity = count === 0 ? 0 : Math.min(4, Math.ceil((count / maxMonthCount) * 4));
-                                                const bg = ['#1a1a1a', '#052e16', '#14532d', '#166534', '#16a34a'][intensity];
+                                                const bg = heat.cells[intensity];
                                                 const isToday = date === checkinData.today.date;
                                                 const day = parseInt(date.split('-')[2]);
                                                 return (
                                                     <div
                                                         key={date}
                                                         title={`${date}: ${count} ${t('dashboard.wordsUnit')}`}
-                                                        style={{ width: 26, height: 26, background: bg, borderRadius: 4, outline: isToday ? '1px solid rgba(255,255,255,0.3)' : 'none' }}
+                                                        style={{ width: 26, height: 26, background: bg, borderRadius: 4, outline: isToday ? `1px solid ${heat.todayRing}` : 'none', outlineOffset: 1 }}
                                                         className="flex items-center justify-center"
                                                     >
-                                                        <span style={{ fontSize: 10, color: count > 0 ? 'rgba(255,255,255,0.7)' : '#404040' }}>{day}</span>
+                                                        <span style={{ fontSize: 10, color: heat.digits[intensity] }}>{day}</span>
                                                     </div>
                                                 );
                                             })}
@@ -375,10 +394,11 @@ export default function DashboardPage() {
                                                     <div className="w-full flex items-end" style={{ height: `${pct}%` }}>
                                                         <div
                                                             title={`${date}: ${count} ${t('dashboard.wordsUnit')}`}
-                                                            style={{ height: '100%', width: '100%', borderRadius: 3, background: isToday ? '#e5e5e5' : count > 0 ? '#525252' : '#262626' }}
+                                                            className={isToday ? 'bg-neutral-200' : count > 0 ? 'bg-neutral-500' : 'bg-neutral-800'}
+                                                            style={{ height: '100%', width: '100%', borderRadius: 3 }}
                                                         />
                                                     </div>
-                                                    <span style={{ fontSize: 10, color: isToday ? '#a3a3a3' : '#525252' }}>{dayLabel}</span>
+                                                    <span className={isToday ? 'text-neutral-300' : 'text-neutral-500'} style={{ fontSize: 10 }}>{dayLabel}</span>
                                                 </div>
                                             );
                                         })}
@@ -414,8 +434,8 @@ export default function DashboardPage() {
                                 type="date"
                                 value={startDate}
                                 onChange={(e) => setStartDate(e.target.value)}
-                                className={`w-full max-w-full bg-neutral-900 border border-neutral-700 rounded-lg ${isMobile ? 'px-2 py-2 text-xs' : 'px-3 py-2 text-sm'} min-h-[48px] focus:border-blue-500 outline-none text-white [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-date-and-time-value]:text-left`}
-                                style={{ colorScheme: 'dark', boxSizing: 'border-box', WebkitAppearance: 'none', appearance: 'none' }}
+                                className={`w-full max-w-full bg-neutral-900 border border-neutral-700 rounded-lg ${isMobile ? 'px-2 py-2 text-xs' : 'px-3 py-2 text-sm'} min-h-[48px] focus:border-blue-500 outline-none text-white [&::-webkit-date-and-time-value]:text-left`}
+                                style={{ boxSizing: 'border-box', WebkitAppearance: 'none', appearance: 'none' }}
                             />
                         </div>
                         <div className="flex-1 min-w-0 shrink">
@@ -424,8 +444,8 @@ export default function DashboardPage() {
                                 type="date"
                                 value={endDate}
                                 onChange={(e) => setEndDate(e.target.value)}
-                                className={`w-full max-w-full bg-neutral-900 border border-neutral-700 rounded-lg ${isMobile ? 'px-2 py-2 text-xs' : 'px-3 py-2 text-sm'} min-h-[48px] focus:border-blue-500 outline-none text-white [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-date-and-time-value]:text-left`}
-                                style={{ colorScheme: 'dark', boxSizing: 'border-box', WebkitAppearance: 'none', appearance: 'none' }}
+                                className={`w-full max-w-full bg-neutral-900 border border-neutral-700 rounded-lg ${isMobile ? 'px-2 py-2 text-xs' : 'px-3 py-2 text-sm'} min-h-[48px] focus:border-blue-500 outline-none text-white [&::-webkit-date-and-time-value]:text-left`}
+                                style={{ boxSizing: 'border-box', WebkitAppearance: 'none', appearance: 'none' }}
                             />
                         </div>
                     </div>
