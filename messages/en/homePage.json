@@ -94,6 +94,9 @@
   },
   "backToHome": {
     "label": "Home",
-    "aria": "Back to home"
+    "aria": "Back to home",
+    "study": "Back to study",
+    "reading": "Back to reading",
+    "back": "Back"
   }
 }

@@ -94,6 +94,9 @@
   },
   "backToHome": {
     "label": "返回主页",
-    "aria": "返回主页"
+    "aria": "返回主页",
+    "study": "返回学习",
+    "reading": "返回阅读",
+    "back": "返回"
   }
 }

@@ -27,6 +27,7 @@ import type { AmbientConfig } from './AmbientSettings';
 import { VoiceEngine } from './VoiceEngine';
 import { SoundScapeEngine } from './SoundScapeEngine';
 import { BackgroundMusicEngine } from './BackgroundMusicEngine';
+import { leaveAmbient } from '@/lib/return-route';
 import { AMBIENT_MUSIC_TRACKS, pickTrackForSeason } from './musicTracks';
 import type { SeasonId } from './SoundScapeEngine';
 import { useIdleControls } from './useIdleControls';
@@ -351,7 +352,7 @@ export default function AmbientScreen() {
         const onKey = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
                 if (settingsOpen) setSettingsOpen(false);
-                else router.back();
+                else leaveAmbient(router);
             }
             if (e.code === 'Space' && !settingsOpen) {
                 e.preventDefault();
@@ -635,7 +636,7 @@ export default function AmbientScreen() {
                     <button
                         type="button"
                         aria-label={t('exit')}
-                        onClick={() => router.back()}
+                        onClick={() => leaveAmbient(router)}
                         className="liquid-glass ambient-ctl flex h-11 w-11 items-center justify-center rounded-full text-white/85 hover:text-white"
                     >
                         <X size={17} />
