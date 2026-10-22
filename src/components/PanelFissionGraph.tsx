@@ -28,9 +28,16 @@ const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), {
     loading: () => <GraphLoadingFallback />,
 }) as unknown as React.ComponentType<AtlasGraphProps>;
 
+/** Screen space (px) that other windows cover; the graph is framed in what is left. */
+type Insets = Record<'top' | 'right' | 'bottom' | 'left', number>;
+const NO_INSETS: Insets = { top: 0, right: 0, bottom: 0, left: 0 };
+
 interface PanelFissionGraphProps {
     word: string | null;
     onNodeClick?: (word: string) => void;
+    /** "immersive" fills the screen behind floating windows: always dark, with floating controls. */
+    variant?: 'panel' | 'immersive';
+    inset?: Partial<Insets>;
 }
 
 // ---------------------------------------------------------------------------
@@ -370,8 +377,8 @@ function solveLayout(view: View): Map<string, Point> {
     return new Map(bodies.map((b) => [b.id, { x: b.x, y: b.y }]));
 }
 
-/** The camera that frames these positions, leaving room for labels and pills. */
-function cameraFor(nodes: AtlasNode[], positions: Map<string, Point>, width: number, height: number): Camera {
+/** The camera that frames these positions in the uncovered part of the area, leaving room for labels and pills. */
+function cameraFor(nodes: AtlasNode[], positions: Map<string, Point>, width: number, height: number, inset: Insets = NO_INSETS): Camera {
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const n of nodes) {
         const p = positions.get(n.id);
@@ -384,10 +391,15 @@ function cameraFor(nodes: AtlasNode[], positions: Map<string, Point>, width: num
     }
     if (minX === Infinity) return { x: 0, y: 0, k: 1 };
     const k = Math.min(1.8, Math.max(0.35, Math.min(
-        (width - FRAME_PADDING * 2) / Math.max(1, maxX - minX),
-        (height - FRAME_PADDING * 2) / Math.max(1, maxY - minY),
+        (width - inset.left - inset.right - FRAME_PADDING * 2) / Math.max(1, maxX - minX),
+        (height - inset.top - inset.bottom - FRAME_PADDING * 2) / Math.max(1, maxY - minY),
     )));
-    return { x: (minX + maxX) / 2, y: (minY + maxY) / 2, k };
+    // The camera looks at the middle of the whole area; shift it so the graph sits in the uncovered part.
+    return {
+        x: (minX + maxX) / 2 + (inset.right - inset.left) / (2 * k),
+        y: (minY + maxY) / 2 + (inset.bottom - inset.top) / (2 * k),
+        k,
+    };
 }
 
 /** Where the words come to rest: their targets mid-transition, otherwise where they are now. */
@@ -1100,11 +1112,12 @@ function shortGloss(translation?: string): string {
     return parts.length > 14 ? `${parts.slice(0, 13)}…` : parts;
 }
 
-export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGraphProps) {
+export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel', inset }: PanelFissionGraphProps) {
     const t = useTranslations('graph');
     const { showHoverTooltip, showGraphTooltip } = useSettings();
     const { theme } = useTheme();
-    const palette = PALETTE[theme];
+    const immersive = variant === 'immersive';
+    const palette = PALETTE[immersive ? 'dark' : theme];
 
     // The last graph that arrived stays on screen while the next word loads; `from` is the outgoing
     // graph it morphs out of.
@@ -1129,6 +1142,8 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
     const zoomSliderRef = useRef<HTMLInputElement>(null);
     const viewRef = useRef<View | null>(null);
     const sizeRef = useRef(size);
+    const toolbarRef = useRef<HTMLDivElement>(null);
+    const insetRef = useRef<Insets>(NO_INSETS);
     const motionRef = useRef<NodeMotion | null>(null);
     const cameraRef = useRef<CameraMotion | null>(null);
     /** True while this component moves the camera, to tell its own zoom events from the user's. */
@@ -1233,6 +1248,23 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
         resizeObserver.current.observe(el);
     }, []);
     useEffect(() => { sizeRef.current = size; }, [size]);
+    const insetKey = [inset?.top, inset?.right, inset?.bottom, inset?.left].map((v) => v ?? 0).join(',');
+    useEffect(() => {
+        const [top, right, bottom, left] = insetKey.split(',').map(Number);
+        insetRef.current = { top, right, bottom, left };
+    }, [insetKey]);
+
+    /** What covers the graph area: other windows, and in the immersive variant the floating toolbar. */
+    const coverage = useCallback((): Insets => {
+        const covered = insetRef.current, bar = toolbarRef.current;
+        return immersive && bar ? { ...covered, top: Math.max(covered.top, bar.offsetTop + bar.offsetHeight) } : covered;
+    }, [immersive]);
+
+    /** The camera that frames these positions where the graph area is not covered. */
+    const frame = useCallback(
+        (nodes: AtlasNode[], positions: Map<string, Point>) => cameraFor(nodes, positions, sizeRef.current.width, sizeRef.current.height, coverage()),
+        [coverage],
+    );
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
@@ -1363,7 +1395,7 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
         const fg = fgRef.current;
         if (!fg) return;
         const now = performance.now();
-        const to = cameraFor(target.nodes, targets, sizeRef.current.width, sizeRef.current.height);
+        const to = frame(target.nodes, targets);
         const moves = planMoves(target.nodes, targets, statesOf(outgoing, motionRef.current, now));
         const newGraph = !outgoing || outgoing.nodes[0] !== target.nodes[0];
         // The words are about to move: the pointer lets go of the one it held (that word kept the focus
@@ -1399,7 +1431,7 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
             applyCamera(to);
         }
         fg.d3ReheatSimulation();
-    }, [cameraNow, applyCamera, snapTo]);
+    }, [cameraNow, applyCamera, snapTo, frame]);
 
     // Runs once per view, as soon as the graph instance exists (its chunk loads lazily) and before the
     // first frame that draws it.
@@ -1435,19 +1467,19 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
     }, [settleView, applyCamera]);
 
     const fit = useCallback(() => {
-        if (!view) return;
-        moveCamera(cameraFor(view.nodes, restingPositions(view.nodes, motionRef.current), size.width, size.height));
-    }, [view, size, moveCamera]);
+        if (view) moveCamera(frame(view.nodes, restingPositions(view.nodes, motionRef.current)));
+    }, [view, frame, moveCamera]);
 
-    // Panels are resizable: keep the graph framed when the available space changes.
+    // Panels are resizable and windows come and go over the immersive graph: keep the graph framed in
+    // whatever space is left.
     useEffect(() => {
         const current = viewRef.current;
         if (!current || !size.width) return;
         const timer = window.setTimeout(() => {
-            moveCamera(cameraFor(current.nodes, restingPositions(current.nodes, motionRef.current), size.width, size.height));
+            moveCamera(frame(current.nodes, restingPositions(current.nodes, motionRef.current)));
         }, 150);
         return () => window.clearTimeout(timer);
-    }, [size, moveCamera]);
+    }, [size, insetKey, frame, moveCamera]);
 
     // Brings dragged words back into the layout.
     const relayout = useCallback(() => { if (view && layout) beginTransition(view, layout, view, true, []); }, [view, layout, beginTransition]);
@@ -1469,6 +1501,7 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
         const area = containerRef.current;
         if (!fg || !view || !area) return;
         const now = performance.now();
+        const covered = coverage();
         // A new graph's labels fade in with it, even when their words were already on screen.
         const graphFade = reducedMotion() ? 1 : clamp01(spring(now - shownAt.current.pills) * ENTER_SPEED);
         const { x: ox, y: oy } = view.origin;
@@ -1495,8 +1528,8 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
             let left = p.x - w / 2 + ux * w / 2;
             // Words carry their label underneath, so leave room for it below the cluster.
             let top = p.y - h / 2 + uy * h / 2 + (uy > 0 ? 16 : 0);
-            left = Math.min(Math.max(left, 6), size.width - w - 6);
-            top = Math.min(Math.max(top, 6), size.height - h - 52);
+            left = Math.min(Math.max(left, covered.left + 6), size.width - covered.right - w - 6);
+            top = Math.min(Math.max(top, covered.top + 6), size.height - covered.bottom - h - 52);
             el.style.visibility = 'visible';
             el.style.opacity = String(Math.min(graphFade, Math.max(...members.map((n) => fadeIn(n.born, now)))));
             el.style.transform = `translate(${left}px, ${top}px)`;
@@ -1508,7 +1541,7 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
             tip.style.visibility = at ? 'visible' : 'hidden';
             if (at) tip.style.transform = `translate(${at.x}px, ${at.y - 18}px) translate(-50%, -100%)`;
         }
-    }, [view, activeHover, size]);
+    }, [view, activeHover, coverage, size]);
 
     // ---- canvas painters -------------------------------------------------------
     const ringAlpha = useCallback((id: string, now: number) => {
@@ -1694,9 +1727,14 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
     const groupLabel = (g: RelationGroup) => t(`atlas.groups.${g}`);
 
     return (
-        <div className="absolute inset-0 flex flex-col overflow-hidden" style={{ background: palette.bg }}>
-            {/* Toolbar */}
-            <div className="z-20 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-neutral-800 bg-neutral-950/85 px-3 py-2 backdrop-blur-md">
+        <div className={`absolute inset-0 overflow-hidden ${immersive ? '' : 'flex flex-col'}`} style={{ background: palette.bg }}>
+            {/* Toolbar: a bar above the graph in a panel, a floating card over it when immersive */}
+            <div
+                ref={toolbarRef}
+                className={immersive
+                    ? 'absolute left-5 top-5 z-20 flex max-w-[min(46rem,calc(100%-2.5rem))] flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-neutral-800 bg-neutral-950/80 px-3 py-2 shadow-2xl backdrop-blur-md'
+                    : 'z-20 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-neutral-800 bg-neutral-950/85 px-3 py-2 backdrop-blur-md'}
+            >
                 <div className="min-w-0">
                     <div className="text-[9px] font-bold uppercase tracking-[0.24em] text-emerald-400">{t('atlas.eyebrow')}</div>
                     <div className="flex items-baseline gap-2">
@@ -1747,7 +1785,7 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
             <div
                 ref={attachGraphArea}
                 // The canvas draws its own pointer (see "Pointer" above), so the system one hides over it.
-                className="relative min-h-0 flex-1 [&_canvas]:cursor-none"
+                className={`${immersive ? 'absolute inset-0' : 'relative min-h-0 flex-1'} [&_canvas]:cursor-none`}
                 // Hover and clicks are resolved here, from where words are drawn right now: force-graph
                 // hit-tests against a picture of the graph it refreshes only every 800 ms, which misses (or
                 // mistakes) words that are moving. Hover follows the pointer, never words sliding under it.
@@ -1859,45 +1897,48 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
                     <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-neutral-500">{t('atlas.empty')}</div>
                 )}
 
-                {/* Familiarity legend (needs room next to the zoom bar) */}
-                {size.width >= 640 && (
-                <div className="absolute bottom-3 left-3 z-10 flex items-center gap-2.5 rounded-md border border-neutral-800 bg-neutral-950/85 px-2.5 py-1.5 text-[10px] text-neutral-400 backdrop-blur">
-                    <span className="font-semibold text-neutral-300">{t('atlas.legend.title')}</span>
-                    {FAMILIARITY_ORDER.map((f) => (
-                        <span key={f} className="inline-flex items-center gap-1">
-                            <RingIcon level={f} palette={palette} />
-                            {t(`atlas.legend.${f}`)}
-                        </span>
-                    ))}
-                    <span className="inline-flex items-center gap-1">
-                        <span className="h-2.5 w-2.5 rounded-full border border-dashed border-neutral-500" />
-                        {t('atlas.legend.unbuilt')}
-                    </span>
-                </div>
-                )}
+                {/* Familiarity legend and zoom bar: at the two bottom corners of a panel; together at the
+                    bottom left when immersive, clear of the windows docked on the right */}
+                <div className={immersive ? 'absolute bottom-5 left-5 z-10 flex items-center gap-2' : 'contents'}>
+                    {size.width >= 640 && (
+                        <div className={`${immersive ? '' : 'absolute bottom-3 left-3'} z-10 flex items-center gap-2.5 rounded-md border border-neutral-800 bg-neutral-950/85 px-2.5 py-1.5 text-[10px] text-neutral-400 backdrop-blur`}>
+                            <span className="font-semibold text-neutral-300">{t('atlas.legend.title')}</span>
+                            {FAMILIARITY_ORDER.map((f) => (
+                                <span key={f} className="inline-flex items-center gap-1">
+                                    <RingIcon level={f} palette={palette} />
+                                    {t(`atlas.legend.${f}`)}
+                                </span>
+                            ))}
+                            <span className="inline-flex items-center gap-1">
+                                <span className="h-2.5 w-2.5 rounded-full border border-dashed border-neutral-500" />
+                                {t('atlas.legend.unbuilt')}
+                            </span>
+                        </div>
+                    )}
 
-                {/* Zoom bar */}
-                <div className="absolute bottom-3 right-3 z-10 flex items-center gap-1 rounded-md border border-neutral-800 bg-neutral-950/85 px-1.5 py-1 text-neutral-400 backdrop-blur">
-                    <button type="button" onClick={() => zoomBy(1 / 1.25)} title={t('zoomOut')} aria-label={t('zoomOut')} className="rounded p-1 hover:bg-neutral-800 hover:text-white"><Minus size={14} /></button>
-                    <input
-                        ref={zoomSliderRef}
-                        type="range"
-                        min={25}
-                        max={400}
-                        step={5}
-                        defaultValue={100}
-                        onChange={(e) => {
-                            const from = readCamera();
-                            cameraRef.current = null;
-                            if (from) applyCamera({ ...from, k: Number(e.target.value) / 100 });
-                        }}
-                        aria-label={t('atlas.zoom')}
-                        className="hidden h-1 w-20 cursor-pointer accent-emerald-500 md:block"
-                    />
-                    <button type="button" onClick={() => zoomBy(1.25)} title={t('zoomIn')} aria-label={t('zoomIn')} className="rounded p-1 hover:bg-neutral-800 hover:text-white"><Plus size={14} /></button>
-                    <span ref={zoomLabelRef} className="w-9 text-center text-[10px] tabular-nums">100%</span>
-                    <button type="button" onClick={() => fit()} title={t('atlas.fit')} aria-label={t('atlas.fit')} className="rounded p-1 hover:bg-neutral-800 hover:text-white"><Maximize size={14} /></button>
-                    <button type="button" onClick={relayout} title={t('atlas.relayout')} aria-label={t('atlas.relayout')} className="rounded p-1 hover:bg-neutral-800 hover:text-white"><RotateCcw size={14} /></button>
+                    {/* Zoom bar */}
+                    <div className={`${immersive ? '' : 'absolute bottom-3 right-3'} z-10 flex items-center gap-1 rounded-md border border-neutral-800 bg-neutral-950/85 px-1.5 py-1 text-neutral-400 backdrop-blur`}>
+                        <button type="button" onClick={() => zoomBy(1 / 1.25)} title={t('zoomOut')} aria-label={t('zoomOut')} className="rounded p-1 hover:bg-neutral-800 hover:text-white"><Minus size={14} /></button>
+                        <input
+                            ref={zoomSliderRef}
+                            type="range"
+                            min={25}
+                            max={400}
+                            step={5}
+                            defaultValue={100}
+                            onChange={(e) => {
+                                const from = readCamera();
+                                cameraRef.current = null;
+                                if (from) applyCamera({ ...from, k: Number(e.target.value) / 100 });
+                            }}
+                            aria-label={t('atlas.zoom')}
+                            className="hidden h-1 w-20 cursor-pointer accent-emerald-500 md:block"
+                        />
+                        <button type="button" onClick={() => zoomBy(1.25)} title={t('zoomIn')} aria-label={t('zoomIn')} className="rounded p-1 hover:bg-neutral-800 hover:text-white"><Plus size={14} /></button>
+                        <span ref={zoomLabelRef} className="w-9 text-center text-[10px] tabular-nums">100%</span>
+                        <button type="button" onClick={() => fit()} title={t('atlas.fit')} aria-label={t('atlas.fit')} className="rounded p-1 hover:bg-neutral-800 hover:text-white"><Maximize size={14} /></button>
+                        <button type="button" onClick={relayout} title={t('atlas.relayout')} aria-label={t('atlas.relayout')} className="rounded p-1 hover:bg-neutral-800 hover:text-white"><RotateCcw size={14} /></button>
+                    </div>
                 </div>
 
                 {/* Hover tooltip */}

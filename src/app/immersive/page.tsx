@@ -6,7 +6,7 @@ import DraggableContainer from '@/components/DraggableContainer';
 import WordList from '@/components/WordList';
 import WordDetail from '@/components/WordDetail';
 import ImmersiveToggle from '@/components/ImmersiveToggle';
-import FissionGraph from '@/components/FissionGraph';
+import PanelFissionGraph from '@/components/PanelFissionGraph';
 import { useSettings } from '@/context/SettingsContext';
 import { useTranslations } from 'next-intl';
 import { cachedFetch, cacheDelete } from '@/lib/client-cache';
@@ -159,12 +159,13 @@ export default function ImmersivePage() {
 
     return (
         <div data-theme="dark" className="relative w-screen h-screen overflow-hidden bg-black">
-            {/* Background Graph */}
+            {/* Background Graph: the same graph as the workspace, framed in the space the docked windows leave */}
             <div className="absolute inset-0 z-0">
-                <FissionGraph
+                <PanelFissionGraph
                     word={currentWord}
                     onNodeClick={handleWordSelect}
-                    mode="immersive"
+                    variant="immersive"
+                    inset={rightDock && (showList || showDetail) ? { right: vw - detailPos.x + 16 } : undefined}
                 />
             </div>
 
@@ -231,8 +232,9 @@ export default function ImmersivePage() {
                 </DraggableContainer>
             )}
 
-            {/* Re-open buttons if closed */}
-            <div className="fixed bottom-6 left-6 flex gap-2 z-40">
+            {/* Re-open buttons if closed: where the windows were docked, next to the mode toggle (the
+                graph's own controls sit at the bottom left) */}
+            <div className="fixed bottom-6 right-24 flex gap-2 z-40">
                 {!showList && (
                     <button
                         onClick={() => setShowList(true)}

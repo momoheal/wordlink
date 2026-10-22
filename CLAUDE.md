@@ -49,8 +49,9 @@ characters. Do not switch them back unless the checkout lives under an ASCII-onl
   - `/immersive` full-screen graph · `/passport` learning report · `/navigator` graph path-finding toward a target word
   - `/my-libraries` custom word books · `/pricing`, `/pay/return` payments · `/model` model tech report
 - `src/components/` — UI. Workspace: `ThreeColumnLayout`, `WordList`, `WordDetail`, `PanelFissionGraph`
-  (graph inside the workspace) and `FissionGraph` (full-screen graph). `word-modules/` are the collapsible
-  blocks of the word detail pane; `mobile/` holds the phone layouts.
+  (the word graph: in the workspace and the reader drawer, and full-screen on `/immersive` with
+  `variant="immersive"`). `word-modules/` are the collapsible blocks of the word detail pane; `mobile/`
+  holds the phone layouts.
 - `src/lib/data.ts` — word data access: libraries, word details, Chinese data, `getFissionData()` (graph)
 - `src/lib/graph-shared.ts` — graph types and relation colors, safe to import from client components
 - `src/lib/reader-engine/` — FSRS-6 scheduler, tokenizer, article recommender
