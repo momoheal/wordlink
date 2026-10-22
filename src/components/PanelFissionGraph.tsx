@@ -199,6 +199,17 @@ function visibleGraph(atlas: Atlas, vis: Visibility) {
     return { nodes, links, family, sectors, familyRadius, sectorRadius, anchors };
 }
 
+/** Unpins dragged words and drops every word next to its anchor so the layout can settle again. */
+function scatterAroundAnchors(nodes: AtlasNode[]) {
+    for (const n of nodes) {
+        if (n.level === 0) continue;
+        n.fx = undefined;
+        n.fy = undefined;
+        n.x = n.ax + (Math.random() - 0.5) * 20;
+        n.y = n.ay + (Math.random() - 0.5) * 20;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Drawing
 // ---------------------------------------------------------------------------
@@ -235,40 +246,43 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
     const { theme } = useTheme();
     const palette = PALETTE[theme];
 
-    const [data, setData] = useState<GraphData | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [familiarity, setFamiliarity] = useState<Record<string, Familiarity>>({});
+    // Fetched state remembers what it was fetched for, so a new word never shows stale results
+    // and nothing has to be reset from inside an effect.
+    const [fetched, setFetched] = useState<{ word: string; graph: GraphData } | null>(null);
+    const [known, setKnown] = useState<{ graph: GraphData; states: Record<string, Familiarity> } | null>(null);
+    const [expandedByWord, setExpandedByWord] = useState<Record<string, RelationGroup[]>>({});
     const [hidden, setHidden] = useState<Set<RelationGroup>>(new Set());
-    const [expanded, setExpanded] = useState<Set<RelationGroup>>(new Set());
     const [secondDegree, setSecondDegree] = useState(false);
     const [hovered, setHovered] = useState<AtlasNode | null>(null);
     const [size, setSize] = useState({ width: 0, height: 0 });
     const [zoomK, setZoomK] = useState(1);
 
-    const containerRef = useRef<HTMLDivElement>(null);
+    const containerRef = useRef<HTMLDivElement | null>(null);
+    const resizeObserver = useRef<ResizeObserver | null>(null);
     const fgRef = useRef<ForceGraphMethods<NodeObject<AtlasNode>, LinkObject<AtlasNode, AtlasLink>> | undefined>(undefined);
     const tooltipRef = useRef<HTMLDivElement>(null);
     const pillRefs = useRef(new Map<RelationGroup, HTMLDivElement>());
     const fittedRef = useRef(false);
     const zoomFrame = useRef<number | null>(null);
 
+    const data = word && fetched?.word === word ? fetched.graph : null;
+    const loading = !!word && !data;
+    const familiarity = useMemo(() => (known && known.graph === data ? known.states : {}), [known, data]);
+    const expanded = useMemo(() => new Set(word ? expandedByWord[word] ?? [] : []), [expandedByWord, word]);
+
     // ---- data -------------------------------------------------------------
     useEffect(() => {
-        if (!word) { setData(null); return; }
+        if (!word) return;
         const controller = new AbortController();
-        setLoading(true);
-        setExpanded(new Set());
-        fittedRef.current = false;
         fetch(`/api/fission?word=${encodeURIComponent(word)}`, { signal: controller.signal })
             .then((res) => res.json() as Promise<GraphData>)
-            .then((graph) => setData(graph))
-            .catch((err) => { if (err?.name !== 'AbortError') setData({ nodes: [], links: [] }); })
-            .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+            .then((graph) => setFetched({ word, graph }))
+            .catch((err) => { if (err?.name !== 'AbortError') setFetched({ word, graph: { nodes: [], links: [] } }); });
         return () => controller.abort();
     }, [word]);
 
     useEffect(() => {
-        if (!data?.nodes.length) { setFamiliarity({}); return; }
+        if (!data?.nodes.length) return;
         const controller = new AbortController();
         fetch('/api/user/word-states', {
             method: 'POST',
@@ -278,7 +292,7 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
             signal: controller.signal,
         })
             .then((res) => (res.ok ? res.json() : { states: {} }))
-            .then((body: { states?: Record<string, Familiarity> }) => setFamiliarity(body.states ?? {}))
+            .then((body: { states?: Record<string, Familiarity> }) => setKnown({ graph: data, states: body.states ?? {} }))
             .catch(() => undefined);
         return () => controller.abort();
     }, [data]);
@@ -303,15 +317,16 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
     }, [view]);
 
     // ---- size / keyboard -----------------------------------------------------
-    useEffect(() => {
-        const el = containerRef.current;
+    // Callback ref: the graph area only exists once a word is selected, after the first render.
+    const attachGraphArea = useCallback((el: HTMLDivElement | null) => {
+        resizeObserver.current?.disconnect();
+        containerRef.current = el;
         if (!el) return;
-        const observer = new ResizeObserver(([entry]) => {
+        resizeObserver.current = new ResizeObserver(([entry]) => {
             const { width, height } = entry.contentRect;
             setSize({ width: Math.round(width), height: Math.round(height) });
         });
-        observer.observe(el);
-        return () => observer.disconnect();
+        resizeObserver.current.observe(el);
     }, []);
 
     useEffect(() => {
@@ -360,13 +375,7 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
     }, [size, fit]);
 
     const relayout = useCallback(() => {
-        for (const n of view?.nodes ?? []) {
-            if (n.level === 0) continue;
-            n.fx = undefined;
-            n.fy = undefined;
-            n.x = n.ax + (Math.random() - 0.5) * 20;
-            n.y = n.ay + (Math.random() - 0.5) * 20;
-        }
+        scatterAroundAnchors(view?.nodes ?? []);
         fittedRef.current = false;
         fgRef.current?.d3ReheatSimulation();
     }, [view]);
@@ -576,7 +585,7 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
                 </div>
             </div>
 
-            <div ref={containerRef} className="relative min-h-0 flex-1">
+            <div ref={attachGraphArea} className="relative min-h-0 flex-1">
                 {/* Graph */}
                 {size.width > 0 && view && view.nodes.length > 1 && (
                     <ForceGraph2D
@@ -636,10 +645,9 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
                                 disabled={!canToggle}
                                 title={canToggle ? label : undefined}
                                 aria-label={canToggle ? label : undefined}
-                                onClick={() => setExpanded((prev) => {
-                                    const next = new Set(prev);
-                                    if (next.has(g)) next.delete(g); else next.add(g);
-                                    return next;
+                                onClick={() => setExpandedByWord((prev) => {
+                                    const current = prev[word] ?? [];
+                                    return { ...prev, [word]: current.includes(g) ? current.filter((x) => x !== g) : [...current, g] };
                                 })}
                                 className="whitespace-nowrap rounded-full border bg-neutral-950/90 px-2.5 py-0.5 text-[11px] font-semibold shadow-sm disabled:cursor-default enabled:hover:bg-neutral-900"
                                 style={{ borderColor: GROUP_COLORS[g], color: GROUP_COLORS[g] }}
