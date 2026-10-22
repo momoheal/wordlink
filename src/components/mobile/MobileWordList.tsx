@@ -4,20 +4,13 @@ import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { cacheGet, cacheSet } from '@/lib/client-cache';
 import { wikiLinksToMarkdown } from '@/lib/wiki-links';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Search, Folder, ChevronLeft, ChevronDown, ChevronUp, Check, X, MessageCircle, BookOpen } from 'lucide-react';
+import { Search, ChevronLeft, ChevronDown, ChevronUp, Check, X, MessageCircle, BookOpen } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useSettings } from '@/context/SettingsContext';
 import { useAI } from '@/components/ai/AIProvider';
-
-interface LibraryItem {
-  name: string;
-  type: 'file' | 'directory';
-  path: string;
-  source?: 'system' | 'user';
-  libraryId?: string;
-  wordCount?: number;
-}
+import LibraryList from '@/components/LibraryList';
+import type { LibraryItem } from '@/lib/library-groups';
 
 interface WordWithData {
   word: string;
@@ -38,6 +31,7 @@ export default function MobileWordList() {
 
   const [words, setWords] = useState<(string | WordWithData)[]>([]);
   const [libraryItems, setLibraryItems] = useState<LibraryItem[]>([]);
+  const [librariesLoaded, setLibrariesLoaded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -83,7 +77,8 @@ export default function MobileWordList() {
     fetch(`/api/libraries?path=${encodeURIComponent(currentPath)}`)
       .then(res => res.ok ? res.json() : [])
       .then(data => setLibraryItems(data))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLibrariesLoaded(true));
   }, [currentPath, viewMode]);
 
   // Fetch groups
@@ -472,51 +467,7 @@ export default function MobileWordList() {
           </div>
         ) : viewMode === 'libraries' && !searchQuery ? (
           /* Library List */
-          <div className="p-3 space-y-1">
-            {libraryItems.map((item) => (
-              <button
-                key={item.name}
-                onClick={() => handleItemClick(item)}
-                className="w-full flex items-center p-4 rounded-xl active:bg-neutral-800 transition-colors text-left"
-              >
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center mr-3 ${
-                  item.type === 'directory'
-                    ? 'bg-blue-500/10'
-                    : item.source === 'user'
-                      ? 'bg-purple-500/10'
-                      : 'bg-green-500/10'
-                }`}>
-                  {item.type === 'directory' ? (
-                    <Folder className="w-5 h-5 text-blue-500" />
-                  ) : (
-                    <svg className={`w-5 h-5 ${item.source === 'user' ? 'text-purple-500' : 'text-green-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-base font-medium text-neutral-200 truncate">
-                      {item.name.replace('.csv', '')}
-                    </span>
-                    {item.source === 'user' && (
-                      <span className="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded flex-shrink-0">
-                        {tw('myLibrary')}
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-xs text-neutral-500">
-                    {item.type === 'directory' ? tw('folder') : item.source === 'user' ? t('wordCount', { count: item.wordCount || 0 }) : t('wordListLabel')}
-                  </span>
-                </div>
-              </button>
-            ))}
-            {libraryItems.length === 0 && (
-              <div className="text-center text-neutral-500 text-sm py-12">
-                {tw('emptyDirectory')}
-              </div>
-            )}
-          </div>
+          <LibraryList items={libraryItems} onSelect={handleItemClick} loading={!librariesLoaded} size="touch" />
         ) : (
           /* Virtualized Word List */
           <div

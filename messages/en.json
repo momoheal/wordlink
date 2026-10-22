@@ -58,8 +58,17 @@
     "selected": "{count} selected",
     "quiz": "Quiz",
     "myLibrary": "My Library",
-    "folder": "Folder",
-    "file": "File",
+    "modeSequential": "In order",
+    "modeShuffled": "Shuffled",
+    "levels": {
+      "初中": "Middle School",
+      "高中": "High School",
+      "CET4": "CET-4",
+      "CET6": "CET-6",
+      "考研": "Grad School",
+      "托福": "TOEFL",
+      "SAT": "SAT"
+    },
     "emptyDirectory": "Empty directory",
     "alphabetical": "Alphabetical",
     "back": "Back"

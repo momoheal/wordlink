@@ -58,8 +58,8 @@
     "selected": "已选 {count} 个",
     "quiz": "测验",
     "myLibrary": "我的词库",
-    "folder": "文件夹",
-    "file": "文件",
+    "modeSequential": "顺序",
+    "modeShuffled": "乱序",
     "emptyDirectory": "空目录",
     "alphabetical": "字母顺序",
     "back": "返回"

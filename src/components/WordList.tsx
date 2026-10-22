@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Search, Folder, ChevronLeft, CheckSquare, Square, Play, Circle, Settings, Sparkles } from 'lucide-react';
+import { Search, ChevronLeft, CheckSquare, Square, Play, Circle, Settings, Sparkles } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useSettings } from '@/context/SettingsContext';
 import SettingsModal from './SettingsModal';
+import LibraryList from './LibraryList';
 import { useAI } from './ai/AIProvider';
 import { useTranslations } from 'next-intl';
+import type { LibraryItem } from '@/lib/library-groups';
 
 interface WordListProps {
     onWordSelect: (word: string) => void;
@@ -16,15 +18,6 @@ interface WordListProps {
     onToggleSidebar: () => void;
     transparent?: boolean;
     onOpenSettings: () => void;
-}
-
-interface LibraryItem {
-    name: string;
-    type: 'file' | 'directory';
-    path: string;
-    source?: 'system' | 'user';
-    libraryId?: string;
-    wordCount?: number;
 }
 
 interface WordWithData {
@@ -45,6 +38,7 @@ export default function WordList({ onWordSelect, selectedWord, isSidebarCollapse
 
     const [words, setWords] = useState<(string | WordWithData)[]>([]);
     const [libraryItems, setLibraryItems] = useState<LibraryItem[]>([]);
+    const [librariesLoaded, setLibrariesLoaded] = useState(false);
 
     // Lazy initialization from localStorage - use useMemo to compute only once
     const initialState = useMemo(() => {
@@ -104,6 +98,8 @@ export default function WordList({ onWordSelect, selectedWord, isSidebarCollapse
                 }
             } catch (error) {
                 console.error('Failed to fetch library items', error);
+            } finally {
+                setLibrariesLoaded(true);
             }
         };
         fetchLibraryItems();
@@ -609,50 +605,7 @@ export default function WordList({ onWordSelect, selectedWord, isSidebarCollapse
                     </div>
                 ) : viewMode === 'libraries' && !searchQuery ? (
                     // Libraries List (Folders & Files)
-                    <div className="p-2 grid grid-cols-1 gap-1">
-                        {libraryItems.map((item) => (
-                            <button
-                                key={item.name}
-                                onClick={() => handleItemClick(item)}
-                                className="flex items-center p-3 rounded-lg hover:bg-neutral-900 transition-colors text-left group"
-                            >
-                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center mr-3 transition-colors ${item.type === 'directory'
-                                    ? 'bg-blue-500/10 group-hover:bg-blue-500/20'
-                                    : item.source === 'user'
-                                        ? 'bg-purple-500/10 group-hover:bg-purple-500/20'
-                                        : 'bg-green-500/10 group-hover:bg-green-500/20'
-                                    }`}>
-                                    {item.type === 'directory' ? (
-                                        <Folder className="w-4 h-4 text-blue-500" />
-                                    ) : (
-                                        <svg className={`w-4 h-4 ${item.source === 'user' ? 'text-purple-500' : 'text-green-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                        </svg>
-                                    )}
-                                </div>
-                                <div className="flex-1">
-                                    <div className="flex items-center gap-2">
-                                        <div className="text-sm font-medium text-neutral-200 group-hover:text-white">
-                                            {item.name.replace('.csv', '')}
-                                        </div>
-                                        {item.source === 'user' && (
-                                            <span className="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded">
-                                                {t('wordList.myLibrary')}
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div className="text-xs text-neutral-500">
-                                        {item.type === 'directory' ? t('wordList.folder') : item.source === 'user' ? t('wordList.wordsCount', { count: item.wordCount || 0 }) : t('wordList.file')}
-                                    </div>
-                                </div>
-                            </button>
-                        ))}
-                        {libraryItems.length === 0 && (
-                            <div className="text-center text-neutral-500 text-sm py-8">
-                                {t('wordList.emptyDirectory')}
-                            </div>
-                        )}
-                    </div>
+                    <LibraryList items={libraryItems} onSelect={handleItemClick} loading={!librariesLoaded} />
                 ) : (
                     // Words List (Virtualized)
                     <div
