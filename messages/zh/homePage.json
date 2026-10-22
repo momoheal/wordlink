@@ -72,7 +72,36 @@
       "desc": "打开学习护照，查看你的认知雷达与成长轨迹。",
       "badge": "学习护照"
     },
-    "eyebrow": "任务控制台"
+    "eyebrow": "任务控制台",
+    "stats": {
+      "streak": "连续学习",
+      "days": "天",
+      "learning": "学习中",
+      "mastered": "已掌握",
+      "accuracy": "今日正确率"
+    },
+    "continue": {
+      "eyebrow": "继续学习",
+      "startEyebrow": "从这里开始",
+      "startTitle": "从一个词开始",
+      "start": "打开星图",
+      "enter": "在星图中打开",
+      "related": "{count} 个关联词"
+    },
+    "review": {
+      "dueLabel": "个词今天该复习了",
+      "clear": "今天没有到期的词，都复习完了",
+      "start": "开始复习",
+      "stages": {
+        "UNFAMILIAR": "陌生",
+        "FAMILIAR": "熟悉",
+        "LEARNED": "学会",
+        "MASTERED": "掌握"
+      }
+    },
+    "reading": {
+      "words": "{count} 词"
+    }
   },
   "mobile": {
     "tabs": {

@@ -72,7 +72,36 @@
       "desc": "Open your Learning Passport to see your cognitive radar and growth.",
       "badge": "Learning Passport"
     },
-    "eyebrow": "Mission control"
+    "eyebrow": "Mission control",
+    "stats": {
+      "streak": "Day streak",
+      "days": "days",
+      "learning": "Learning",
+      "mastered": "Mastered",
+      "accuracy": "Today's accuracy"
+    },
+    "continue": {
+      "eyebrow": "Continue",
+      "startEyebrow": "Start here",
+      "startTitle": "Start with one word",
+      "start": "Open the atlas",
+      "enter": "Open in the atlas",
+      "related": "{count} related words"
+    },
+    "review": {
+      "dueLabel": "words due today",
+      "clear": "Nothing due — you are all caught up",
+      "start": "Start review",
+      "stages": {
+        "UNFAMILIAR": "New",
+        "FAMILIAR": "Familiar",
+        "LEARNED": "Learned",
+        "MASTERED": "Mastered"
+      }
+    },
+    "reading": {
+      "words": "{count} words"
+    }
   },
   "mobile": {
     "tabs": {
