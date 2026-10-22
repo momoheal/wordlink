@@ -6,6 +6,8 @@ const ASSET_CACHE = 'public, max-age=86400, stale-while-revalidate=604800';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+    // A stray lockfile in a parent directory would otherwise be picked as the workspace root.
+    outputFileTracingRoot: __dirname,
     typescript: {
         ignoreBuildErrors: false,
     },
