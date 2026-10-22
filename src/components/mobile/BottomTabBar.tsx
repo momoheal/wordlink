@@ -20,7 +20,7 @@ export default function BottomTabBar({ forceShow = false }: BottomTabBarProps) {
   const t = useTranslations('mobile.tabs');
   const { showBottomNav } = useSettings();
   const visible = forceShow || showBottomNav;
-  return <nav className={`fixed bottom-0 left-0 right-0 z-50 border-t border-white/10 bg-[#080b0d]/95 backdrop-blur-xl ${visible ? 'translate-y-0' : 'translate-y-full'}`} style={{ paddingBottom: 'env(safe-area-inset-bottom)' }} aria-hidden={!visible}>
+  return <nav className={`fixed bottom-0 left-0 right-0 z-50 border-t border-white/10 bg-neutral-950/95 backdrop-blur-xl ${visible ? 'translate-y-0' : 'translate-y-full'}`} style={{ paddingBottom: 'env(safe-area-inset-bottom)' }} aria-hidden={!visible}>
     <div className="flex h-14 items-center justify-around overflow-x-auto px-1">
       {tabs.map((tab) => {
         const Icon = tab.icon;

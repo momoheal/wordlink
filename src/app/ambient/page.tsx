@@ -11,5 +11,5 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default function AmbientPage() {
-    return <AmbientScreen />;
+    return <div data-theme="dark" className="contents"><AmbientScreen /></div>;
 }

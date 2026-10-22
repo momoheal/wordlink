@@ -128,7 +128,7 @@ export default function ReadHubPage() {
     };
 
     return (
-        <div className="min-h-screen bg-[#08080a] text-white selection:bg-cyan-500/30">
+        <div className="min-h-screen bg-neutral-950 text-white selection:bg-cyan-500/30">
             {/* 背景氛围渐变 */}
             <div className="pointer-events-none fixed inset-0 z-0 opacity-40">
                 <div className="absolute left-1/4 top-0 h-96 w-96 rounded-full bg-cyan-600/15 blur-[120px]" />

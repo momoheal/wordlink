@@ -95,7 +95,7 @@ export default function PricingClient() {
     };
 
     return (
-        <div className="relative min-h-screen bg-black text-[#e5e7eb] font-sans antialiased overflow-x-hidden">
+        <div className="relative min-h-screen bg-black text-neutral-200 font-sans antialiased overflow-x-hidden">
             {/* 背景氛围光斑，与 landing 同一风格 */}
             <div className="pointer-events-none fixed inset-0 z-0 opacity-50">
                 <div className="absolute left-1/4 top-0 h-96 w-96 rounded-full bg-violet-600/15 blur-[120px]" />

@@ -64,7 +64,7 @@ export default function PayReturnClient() {
     }, [outTradeNo, runId]);
 
     return (
-        <div className="relative min-h-screen bg-black text-[#e5e7eb] font-sans antialiased flex items-center justify-center px-6">
+        <div className="relative min-h-screen bg-black text-neutral-200 font-sans antialiased flex items-center justify-center px-6">
             <div className="pointer-events-none fixed inset-0 opacity-50">
                 <div className="absolute left-1/3 top-1/4 h-96 w-96 rounded-full bg-violet-600/15 blur-[120px]" />
             </div>

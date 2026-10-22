@@ -128,7 +128,7 @@ export default async function ModelReportPage() {
     }));
 
     return (
-        <div className="relative min-h-screen bg-[#05080c] font-sans text-[#e5e7eb] antialiased">
+        <div data-theme="dark" className="relative min-h-screen bg-[#05080c] font-sans text-[#e5e7eb] antialiased">
             {/* 顶部导航 */}
             <header className="sticky top-0 z-50 border-b border-white/[0.08] bg-black/60 backdrop-blur-xl">
                 <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">

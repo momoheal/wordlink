@@ -158,7 +158,7 @@ export default function ImmersivePage() {
     const currentWord = currentIndex >= 0 ? history[currentIndex] : null;
 
     return (
-        <div className="relative w-screen h-screen overflow-hidden bg-black">
+        <div data-theme="dark" className="relative w-screen h-screen overflow-hidden bg-black">
             {/* Background Graph */}
             <div className="absolute inset-0 z-0">
                 <FissionGraph

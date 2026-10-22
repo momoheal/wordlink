@@ -717,6 +717,13 @@
     "recoveringDesc": "捕获到一个渲染错误，点击下方按钮重置并恢复。",
     "resetRecover": "重置并恢复"
   },
+  "theme": {
+    "appearance": "外观",
+    "light": "浅色",
+    "dark": "深色",
+    "switchToLight": "切换到浅色模式",
+    "switchToDark": "切换到深色模式"
+  },
   "wordForms": {
     "plural": "复数",
     "singular": "单数",

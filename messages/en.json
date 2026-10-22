@@ -717,6 +717,13 @@
     "recoveringDesc": "A rendering error was caught. Click below to reset and recover.",
     "resetRecover": "Reset & recover"
   },
+  "theme": {
+    "appearance": "Appearance",
+    "light": "Light",
+    "dark": "Dark",
+    "switchToLight": "Switch to light mode",
+    "switchToDark": "Switch to dark mode"
+  },
   "wordForms": {
     "plural": "Plural",
     "singular": "Singular",

@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 // Temporarily disabled due to Next.js 16 + Turbopack font loading issue
 // import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import "./theme-palette.css";
+import { cookies } from 'next/headers';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
 
@@ -47,6 +49,8 @@ export const viewport: Viewport = {
   viewportFit: 'cover', // iOS全屏适配，覆盖刘海屏等
 };
 
+import { ThemeProvider } from "@/context/ThemeContext";
+import { THEME_COOKIE } from "@/lib/theme";
 import { SettingsProvider } from "@/context/SettingsContext";
 import { ModuleConfigProvider } from "@/context/ModuleConfigContext";
 import { AIProvider } from "@/components/ai/AIProvider";
@@ -61,9 +65,10 @@ export default async function RootLayout({
 }>) {
   const locale = await getLocale();
   const messages = await getMessages();
+  const theme = (await cookies()).get(THEME_COOKIE)?.value === 'light' ? 'light' : 'dark';
 
   return (
-    <html lang={locale}>
+    <html lang={locale} data-theme={theme}>
       <head>
         {/* 字体已自托管到 /fonts 并内联进 globals.css（原 fonts.googleapis.com +
             db.onlinewebfonts.com 三条渲染阻塞外链已移除） */}
@@ -87,15 +92,17 @@ export default async function RootLayout({
         suppressHydrationWarning
       >
         <NextIntlClientProvider locale={locale} messages={messages}>
-          <SettingsProvider>
-            <ModuleConfigProvider>
-              <AIProvider>
-                <AppChrome>{children}</AppChrome>
-                <AIComponents />
-                <BackToHome />
-              </AIProvider>
-            </ModuleConfigProvider>
-          </SettingsProvider>
+          <ThemeProvider initialTheme={theme}>
+            <SettingsProvider>
+              <ModuleConfigProvider>
+                <AIProvider>
+                  <AppChrome>{children}</AppChrome>
+                  <AIComponents />
+                  <BackToHome />
+                </AIProvider>
+              </ModuleConfigProvider>
+            </SettingsProvider>
+          </ThemeProvider>
         </NextIntlClientProvider>
       </body>
     </html>

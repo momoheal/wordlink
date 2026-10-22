@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { cacheDelete } from '@/lib/client-cache';
+import ThemeToggle from '@/components/ThemeToggle';
 import { BarChart3, BookOpenText, Compass, FileClock, Headphones, LibraryBig, LogOut, MoonStar, ScanText, Settings, ShieldCheck, Waypoints } from 'lucide-react';
 
 const PRIMARY_NAV = [
@@ -48,12 +49,13 @@ export default function AppRail() {
       <span className="pointer-events-none absolute left-[52px] z-50 hidden whitespace-nowrap rounded-lg border border-white/10 bg-black/90 px-2.5 py-1 text-[11px] text-white/85 shadow-xl group-hover:block">{label}</span>
     </Link>;
   };
-  return <aside className="fixed inset-y-0 left-0 z-40 flex w-[60px] flex-col items-center border-r border-white/[0.06] bg-[#0a0a0c] py-4">
+  return <aside className="fixed inset-y-0 left-0 z-40 flex w-[60px] flex-col items-center border-r border-white/[0.06] bg-neutral-950 py-4">
     <Link href="/home" title={t('home')} className="mb-5 flex h-9 w-9 items-center justify-center rounded-xl border border-white/15 bg-white/5 font-serif italic text-base text-white transition-colors hover:border-white/40" style={{ fontFamily: "'Instrument Serif', serif" }}>L</Link>
     <nav className="flex flex-col items-center gap-1.5">{PRIMARY_NAV.map(renderItem)}</nav>
     <div className="my-4 h-px w-7 bg-white/10" />
     <nav className="flex flex-col items-center gap-1.5">{INSIGHT_NAV.map(renderItem)}</nav>
     <div className="mt-auto flex flex-col items-center gap-1.5">
+      <ThemeToggle size={18} className="flex h-10 w-10 items-center justify-center rounded-xl text-white/40 transition-all hover:bg-white/5 hover:text-white/85" />
       {SYSTEM_NAV.map(renderItem)}
       <div className="my-3 h-px w-7 bg-white/10" />
       <button type="button" onClick={handleLogout} title={t('logout')} className="group relative flex h-10 w-10 items-center justify-center rounded-xl text-white/40 transition-all hover:bg-rose-400/10 hover:text-rose-300">

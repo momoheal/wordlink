@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Blocks, Keyboard, Settings as SettingsIcon, RotateCcw, Lock, ChevronDown, ChevronUp, ArrowUp, ArrowDown, GripVertical } from 'lucide-react';
+import { Blocks, Keyboard, Settings as SettingsIcon, RotateCcw, Lock, ChevronDown, ChevronUp, ArrowUp, ArrowDown, GripVertical, Moon, Sun } from 'lucide-react';
 import { useSettings } from '@/context/SettingsContext';
+import { useTheme } from '@/context/ThemeContext';
 import { useModuleConfig } from '@/context/ModuleConfigContext';
 import { MODULE_REGISTRY, BUILTIN_PRESET_MODES, type PresetMode } from '@/types/modules';
 import { useDeviceType } from '@/lib/hooks';
@@ -13,6 +14,7 @@ import FullscreenButton from './FullscreenButton';
 export default function SettingsContent() {
     const t = useTranslations();
     const { groupSize, showChinese, showScore, showHoverTooltip, showWordDetailTooltip, showGraphTooltip, showConnectionMeanings, shortcuts, layoutMode, preferredAccent, youtubeMode, youtubeAccent, updateSettings, resetShortcuts } = useSettings();
+    const { theme, setTheme } = useTheme();
     const deviceType = useDeviceType();
     const isTablet = deviceType === 'tablet';
     const { preset, modules, collapsedModules, moduleOrder, setPreset, toggleModule, toggleCollapse, moveModule, resetToDefault } = useModuleConfig();
@@ -109,6 +111,27 @@ export default function SettingsContent() {
                                         {t('settings.language')}
                                     </label>
                                     <LanguageSwitcher />
+                                </div>
+
+                                <div>
+                                    <span className="block text-sm font-medium text-neutral-400 mb-2">
+                                        {t('theme.appearance')}
+                                    </span>
+                                    <div className="inline-flex rounded-lg border border-neutral-800 p-1" role="radiogroup" aria-label={t('theme.appearance')}>
+                                        {(['dark', 'light'] as const).map((option) => (
+                                            <button
+                                                key={option}
+                                                type="button"
+                                                role="radio"
+                                                aria-checked={theme === option}
+                                                onClick={() => setTheme(option)}
+                                                className={`flex items-center gap-2 rounded-md px-4 py-1.5 text-sm transition-colors ${theme === option ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:text-white'}`}
+                                            >
+                                                {option === 'dark' ? <Moon size={14} /> : <Sun size={14} />}
+                                                {t(`theme.${option}`)}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
 
                                 <div>

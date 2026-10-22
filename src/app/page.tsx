@@ -30,7 +30,7 @@ export default function HomePage() {
     };
 
     return (
-        <div className="relative min-h-screen bg-black text-[#e5e7eb] font-sans antialiased selection:bg-white selection:text-black overflow-x-hidden">
+        <div data-theme="dark" className="relative min-h-screen bg-black text-[#e5e7eb] font-sans antialiased selection:bg-white selection:text-black overflow-x-hidden">
             {/* ===== 全站无缝循环 Google Veo 3.1 动态星际背景 (Seamless Dual-Track Cosmic Video) ===== */}
             <CosmicRotatingBackground />
 

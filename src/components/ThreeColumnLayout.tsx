@@ -11,6 +11,7 @@ import { User, LogOut, BrainCircuit, Clock, Settings, Crown, Sparkles } from 'lu
 import Link from 'next/link';
 import LoginModal from './LoginModal';
 import ImmersiveToggle from './ImmersiveToggle';
+import ThemeToggle from './ThemeToggle';
 import SettingsModal from './SettingsModal';
 import { cachedFetch, cacheDelete } from '@/lib/client-cache';
 
@@ -288,6 +289,7 @@ function ThreeColumnLayoutContent() {
                     >
                         <Settings size={16} />
                     </button>
+                    <ThemeToggle className="text-neutral-500 hover:text-white transition-colors p-1" />
                     <div className="h-4 w-[1px] bg-neutral-800 mx-1"></div>
                     {user ? (
                         <div className="flex items-center gap-2">

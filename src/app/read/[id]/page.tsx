@@ -129,7 +129,7 @@ export default function ReadDetailPage() {
 
     if (loading) {
         return (
-            <div className="flex min-h-screen flex-col items-center justify-center bg-[#08080a] text-white">
+            <div className="flex min-h-screen flex-col items-center justify-center bg-neutral-950 text-white">
                 <Loader2 size={28} className="animate-spin text-cyan-400" />
                 <span className="mt-3 text-xs text-white/40">{t('loading')}</span>
             </div>
@@ -138,7 +138,7 @@ export default function ReadDetailPage() {
 
     if (!article) {
         return (
-            <div className="flex min-h-screen flex-col items-center justify-center bg-[#08080a] p-6 text-center text-white">
+            <div className="flex min-h-screen flex-col items-center justify-center bg-neutral-950 p-6 text-center text-white">
                 <p className="text-sm text-white/50">{t('notFound')}</p>
                 <Link
                     href="/read"
@@ -151,7 +151,7 @@ export default function ReadDetailPage() {
     }
 
     return (
-        <div className="min-h-screen bg-[#08080a] pb-32 text-white selection:bg-cyan-500/30">
+        <div className="min-h-screen bg-neutral-950 pb-32 text-white selection:bg-cyan-500/30">
             {/* 背景氛围渐变 */}
             <div className="pointer-events-none fixed inset-0 z-0 opacity-30">
                 <div className="absolute left-1/3 top-0 h-96 w-96 rounded-full bg-cyan-500/10 blur-[140px]" />

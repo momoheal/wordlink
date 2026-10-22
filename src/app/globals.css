@@ -42,6 +42,34 @@ body {
   background: #404040;
 }
 
+/* ===== Light theme: what the palette remap in theme-palette.css cannot reach ===== */
+[data-theme="light"] ::-webkit-scrollbar-track { background: #ebe7dc; }
+[data-theme="light"] ::-webkit-scrollbar-thumb { background: #cfcabd; }
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: #b6b1a3; }
+
+/* neutral-900 is a raised surface on paper; as a hairline on black it must stay visible */
+[data-theme="light"] .border-neutral-900 { border-color: #e2ded3; }
+
+/* @tailwindcss/typography hardcodes its prose-invert colors */
+[data-theme="light"] .prose-invert {
+  --tw-prose-body: #2e3832;
+  --tw-prose-headings: #161d19;
+  --tw-prose-lead: #424c46;
+  --tw-prose-links: #1d4ed8;
+  --tw-prose-bold: #161d19;
+  --tw-prose-counters: #5b665f;
+  --tw-prose-bullets: #9fa69f;
+  --tw-prose-hr: #d3cfc2;
+  --tw-prose-quotes: #2e3832;
+  --tw-prose-quote-borders: #d3cfc2;
+  --tw-prose-captions: #5b665f;
+  --tw-prose-code: #161d19;
+  --tw-prose-pre-code: #2e3832;
+  --tw-prose-pre-bg: #ebe7dc;
+  --tw-prose-th-borders: #d3cfc2;
+  --tw-prose-td-borders: #e7e3d8;
+}
+
 /* Mobile: prevent zoom on double-tap */
 @media (max-width: 767px) {
   * {
