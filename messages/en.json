@@ -493,6 +493,34 @@
       "derivative": "Derivative",
       "inflection": "Inflection",
       "spelling_similar": "Similar spelling"
+    },
+    "atlas": {
+      "eyebrow": "Word atlas",
+      "stats": "{shown} of {total} words",
+      "groups": {
+        "family": "Word family",
+        "synonym": "Synonyms",
+        "near_synonym": "Near-synonyms",
+        "antonym": "Antonyms",
+        "spelling_similar": "Look-alikes"
+      },
+      "showAll": "Show all {total} {group}",
+      "showFewer": "Show fewer {group}",
+      "secondDegree": "2nd degree",
+      "secondDegreeHint": "Also show words linked to the neighbours (H)",
+      "relayout": "Re-layout",
+      "fit": "Fit to view",
+      "zoom": "Zoom",
+      "legend": {
+        "title": "Familiarity",
+        "new": "New",
+        "seen": "Seen",
+        "weak": "Weak",
+        "learning": "Learning",
+        "mastered": "Mastered",
+        "unbuilt": "No entry yet"
+      },
+      "empty": "No related words found for this word yet."
     }
   },
   "notes": {

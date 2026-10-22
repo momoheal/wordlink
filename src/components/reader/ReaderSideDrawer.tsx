@@ -314,8 +314,8 @@ export default function ReaderSideDrawer({
                                     <div className="h-[420px] w-full sm:h-[460px]">
                                         <PanelFissionGraph
                                             word={word}
-                                            onNodeClick={(node) => {
-                                                if (node?.id) setWord(node.id);
+                                            onNodeClick={(nextWord) => {
+                                                if (nextWord) setWord(nextWord);
                                             }}
                                         />
                                     </div>

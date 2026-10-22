@@ -38,3 +38,27 @@ export interface GraphData {
     links: GraphLink[];
     definitions?: Record<string, string>;
 }
+
+/** How well the current user knows a word; absent = never opened ("new"). */
+export type Familiarity = 'seen' | 'weak' | 'learning' | 'mastered';
+
+/**
+ * Relation groups shown in the graph toolbar. Derivatives and inflections are merged into one
+ * "word family", drawn as a bubble around the centre word instead of as edges.
+ */
+export type RelationGroup = 'family' | 'synonym' | 'near_synonym' | 'antonym' | 'spelling_similar';
+
+export const RELATION_GROUPS: RelationGroup[] = ['family', 'synonym', 'near_synonym', 'antonym', 'spelling_similar'];
+
+export const GROUP_COLORS: Record<RelationGroup, string> = {
+    family: RELATION_COLORS.derivative,
+    synonym: RELATION_COLORS.synonym,
+    near_synonym: RELATION_COLORS.near_synonym,
+    antonym: RELATION_COLORS.antonym,
+    spelling_similar: RELATION_COLORS.spelling_similar,
+};
+
+export function groupOf(type: RelationType | undefined): RelationGroup {
+    if (type === 'derivative' || type === 'inflection') return 'family';
+    return type ?? 'synonym';
+}

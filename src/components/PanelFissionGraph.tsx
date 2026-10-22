@@ -1,958 +1,705 @@
 'use client';
 
-import { useRef, useEffect, useState, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { GraphData, RELATION_COLORS } from '@/lib/graph-shared';
-import { useSettings } from '@/context/SettingsContext';
-import { useDeviceType } from '@/lib/hooks';
 import { useTranslations } from 'next-intl';
+import type { ForceGraphMethods, ForceGraphProps, LinkObject, NodeObject } from 'react-force-graph-2d';
+import { forceCollide, forceRadial, forceX, forceY } from 'd3-force';
+import { Maximize, Minus, Plus, RotateCcw } from 'lucide-react';
+import { useSettings } from '@/context/SettingsContext';
+import { useTheme, type Theme } from '@/context/ThemeContext';
 import WordTooltip from './WordTooltip';
-import { Maximize2, Settings2, Eye, EyeOff, ZoomIn, ZoomOut, Settings, X, RefreshCw } from 'lucide-react';
-import { forceCollide } from 'd3-force';
+import {
+    GROUP_COLORS, RELATION_GROUPS, groupOf,
+    type Familiarity, type GraphData, type GraphNode, type RelationGroup,
+} from '@/lib/graph-shared';
 
 function GraphLoadingFallback() {
     const t = useTranslations('graph');
-    return <div className="text-neutral-400">{t('loadingGraph')}</div>;
+    return <div className="flex h-full items-center justify-center text-sm text-neutral-500">{t('loadingGraph')}</div>;
 }
 
-// Dynamically import ForceGraph2D with no SSR
+// next/dynamic drops the component's generics; re-attach them so callbacks get typed nodes.
+type AtlasGraphProps = ForceGraphProps<NodeObject<AtlasNode>, LinkObject<AtlasNode, AtlasLink>> & {
+    ref?: React.MutableRefObject<ForceGraphMethods<NodeObject<AtlasNode>, LinkObject<AtlasNode, AtlasLink>> | undefined>;
+};
 const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), {
     ssr: false,
-    loading: () => <GraphLoadingFallback />
-});
+    loading: () => <GraphLoadingFallback />,
+}) as unknown as React.ComponentType<AtlasGraphProps>;
 
 interface PanelFissionGraphProps {
     word: string | null;
-    onNodeClick?: (node: any) => void;
+    onNodeClick?: (word: string) => void;
 }
 
-// Particle system
-interface Particle {
-    x: number;
-    y: number;
-    vx: number;
-    vy: number;
-    size: number;
-    opacity: number;
-    color: string;
+// ---------------------------------------------------------------------------
+// Layout model. The API returns an ego network: the centre word, its direct neighbours (L1) and
+// their neighbours (L2). Each L1 word belongs to one relation group; groups sit in their own
+// sector around the centre, the word family hugs the centre inside a dashed bubble.
+// ---------------------------------------------------------------------------
+
+/** Neighbours shown per group before "show all". */
+const GROUP_CAP = 10;
+/** Second-degree words shown per neighbour. */
+const L2_PER_PARENT = 3;
+/** When a word is linked to the centre in several ways, the first group in this list wins. */
+const GROUP_PRIORITY: RelationGroup[] = ['family', 'antonym', 'synonym', 'near_synonym', 'spelling_similar'];
+
+const RADIUS = { center: 15, l1: 8.5, l2: 4 };
+
+interface AtlasNode extends GraphNode {
+    group: RelationGroup | null;
+    parentId?: string;
+    /** Order inside its group (L1) or under its parent (L2). */
+    rank: number;
+    ax: number;
+    ay: number;
+    /** Distance from the centre the layout keeps this word at. */
+    ring?: number;
+    x?: number;
+    y?: number;
+    fx?: number;
+    fy?: number;
 }
 
-interface GraphSettings {
-    level1Size: number;
-    level2Size: number;
-    level1FontSize: number;
-    level2FontSize: number;
-    chargeStrength: number;
-    level1LinkDistance: number;
-    level2LinkDistance: number;
-    collisionRadius: number; // Collision padding multiplier
-    lockNodeOnDrag: boolean; // If true, nodes stay fixed where dropped
-    showHoverTooltip: boolean;
+interface AtlasLink {
+    source: string | AtlasNode;
+    target: string | AtlasNode;
+    group: RelationGroup;
+    level: 1 | 2;
+    pending: boolean;
 }
 
-const defaultGraphSettings: GraphSettings = {
-    level1Size: 1.6,
-    level2Size: 0.8,
-    level1FontSize: 13,
-    level2FontSize: 9,
-    chargeStrength: -3500, // Balanced repulsion
-    level1LinkDistance: 175,
-    level2LinkDistance: 50,
-    collisionRadius: 40,
-    lockNodeOnDrag: false,
-    showHoverTooltip: true,
-};
+interface Atlas {
+    centerId: string;
+    nodes: AtlasNode[];
+    links: AtlasLink[];
+    totals: Record<RelationGroup, number>;
+}
 
-const mobileGraphSettings: GraphSettings = {
-    level1Size: 3.0,
-    level2Size: 1.2,
-    level1FontSize: 13,
-    level2FontSize: 10,
-    chargeStrength: -3000,
-    level1LinkDistance: 140,
-    level2LinkDistance: 45,
-    collisionRadius: 35,
-    lockNodeOnDrag: false,
-    showHoverTooltip: false,
-};
+const endpointId = (end: string | { id: string }) => (typeof end === 'object' ? end.id : end);
 
-export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGraphProps) {
-    const { showHoverTooltip: globalShowHoverTooltip, showGraphTooltip, showConnectionMeanings } = useSettings();
-    const t = useTranslations();
-    const deviceType = useDeviceType();
-    const isMobile = deviceType === 'mobile';
-    const initialSettings = isMobile ? mobileGraphSettings : defaultGraphSettings;
-    const [data, setData] = useState<GraphData>({ nodes: [], links: [] });
-    // Initialize with window size
-    const [dimensions, setDimensions] = useState({
-        width: typeof window !== 'undefined' ? window.innerWidth / 2 : 800,
-        height: typeof window !== 'undefined' ? window.innerHeight : 600
-    });
-    const [hoveredNode, setHoveredNode] = useState<any>(null);
-    const [particles, setParticles] = useState<Particle[]>([]);
-    const [showSettings, setShowSettings] = useState(false);
-    const [showLevel2, setShowLevel2] = useState(true);
-    const [refreshKey, setRefreshKey] = useState(0);
-    const [isLoading, setIsLoading] = useState(false);
-    const [uiSettings, setUiSettings] = useState<GraphSettings>({ ...initialSettings });
-    const [settings, setSettings] = useState<GraphSettings>({ ...initialSettings });
+function buildAtlas(data: GraphData): Atlas | null {
+    const center = data.nodes.find((n) => n.level === 0);
+    if (!center) return null;
 
-    // 关系类型筛选（词链 v2：按类型开关边）
-    const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(new Set());
-    const presentTypes = useMemo(() => {
-        const types = new Set<string>();
-        data.links.forEach((l: any) => { if (l.type) types.add(l.type); });
-        return Array.from(types);
-    }, [data]);
-    const filteredData = useMemo<GraphData>(() => {
-        if (hiddenTypes.size === 0) return data;
-        const links = data.links.filter((l: any) => !l.type || !hiddenTypes.has(l.type));
-        const used = new Set<string>();
-        links.forEach((l: any) => {
-            const s = typeof l.source === 'object' ? (l.source as any).id : l.source;
-            const e = typeof l.target === 'object' ? (l.target as any).id : l.target;
-            used.add(s); used.add(e);
-        });
-        const nodes = data.nodes.filter((n: any) => n.level === 0 || used.has(n.id));
-        return { ...data, nodes, links };
-    }, [data, hiddenTypes]);
-
-    const resetToDefaults = () => {
-        setUiSettings({ ...initialSettings });
-        setSettings({ ...initialSettings });
-    };
-
-    const containerRef = useRef<HTMLDivElement>(null);
-    const fgRef = useRef<any>(null);
-    const tooltipRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        if (!word) {
-            setData({ nodes: [], links: [] });
-            return;
+    const l1Group = new Map<string, RelationGroup>();
+    const l2Parent = new Map<string, string>();
+    for (const link of data.links) {
+        const s = endpointId(link.source as string | { id: string });
+        const t = endpointId(link.target as string | { id: string });
+        if (s === center.id && t !== center.id) {
+            const g = groupOf(link.type);
+            const prev = l1Group.get(t);
+            if (!prev || GROUP_PRIORITY.indexOf(g) < GROUP_PRIORITY.indexOf(prev)) l1Group.set(t, g);
+        } else if (t !== center.id && !l2Parent.has(t)) {
+            l2Parent.set(t, s);
         }
-
-        const fetchData = async () => {
-            setIsLoading(true);
-            try {
-                const res = await fetch(`/api/fission?word=${word}`);
-                const graphData = await res.json();
-
-                setData(graphData);
-            } catch (error) {
-                console.error('Failed to fetch graph data', error);
-            } finally {
-                setTimeout(() => setIsLoading(false), 100); // Brief delay to prevent flash
-            }
-        };
-
-        fetchData();
-    }, [word, refreshKey]); // Include refreshKey to trigger refetch
-
-    useEffect(() => {
-        const updateDimensions = () => {
-            if (containerRef.current) {
-                const { width, height } = containerRef.current.getBoundingClientRect();
-                setDimensions({ width, height });
-            }
-        };
-
-        // Initial size
-        updateDimensions();
-
-        // Robust Observer
-        const observer = new ResizeObserver((entries) => {
-            for (const entry of entries) {
-                const { width, height } = entry.contentRect;
-                setDimensions({ width, height });
-            }
-        });
-
-        if (containerRef.current) {
-            observer.observe(containerRef.current);
-        }
-
-        // Backup: Window resize
-        window.addEventListener('resize', updateDimensions);
-
-        // Keyboard shortcut for toggling Level 2
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key && e.key.toLowerCase() === 'h' && !e.repeat && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
-                setShowLevel2(prev => !prev);
-            }
-        };
-        window.addEventListener('keydown', handleKeyDown);
-
-        return () => {
-            observer.disconnect();
-            window.removeEventListener('resize', updateDimensions);
-            window.removeEventListener('keydown', handleKeyDown);
-        };
-    }, []);
-
-    // Auto-fit graph when data changes (word switch)
-    useEffect(() => {
-        if (fgRef.current && data.nodes.length > 0) {
-            // Reheat simulation to ensure nodes expand before zooming
-            fgRef.current.d3ReheatSimulation();
-
-            setTimeout(() => {
-                if (data.nodes.length < 5) {
-                    // Small graph: Center and set comfortable zoom
-                    fgRef.current?.centerAt(0, 0, 500);
-                    fgRef.current?.zoom(1.2, 500);
-                } else {
-                    // Large graph: Zoom to fit all nodes with padding
-                    // Keep a tighter margin so the relationship graph occupies
-                    // more of the cognitive studio instead of appearing tiny.
-                    fgRef.current?.zoomToFit(500, 28);
-                }
-            }, 300); // Allow simulation to expand
-        }
-    }, [data]);
-
-    // Auto-fit graph when dimensions change (e.g., returning from immersive)
-    useEffect(() => {
-        // Only trigger if we have valid dimensions and data
-        if (fgRef.current && dimensions.width > 0 && dimensions.height > 0 && data.nodes.length > 0) {
-            setTimeout(() => {
-                if (data.nodes.length < 5) {
-                    fgRef.current?.centerAt(0, 0, 500);
-                    fgRef.current?.zoom(1.2, 500);
-                } else {
-                    fgRef.current?.zoomToFit(500, 28);
-                }
-            }, 500); // Longer delay to ensure panel is fully rendered
-        }
-    }, [dimensions]);
-
-    // Auto-refresh when returning from immersive mode
-    useEffect(() => {
-        const shouldAutoRefresh = sessionStorage.getItem('autoRefreshGraph');
-        if (shouldAutoRefresh === 'true') {
-            // Clear the flag
-            sessionStorage.removeItem('autoRefreshGraph');
-            // Trigger refresh
-            setRefreshKey(prev => prev + 1);
-        }
-    }, []); // Run once on mount
-
-    // Re-center logic merged into auto-fit effect above
-
-    // Update forces when settings change
-    useEffect(() => {
-        if (fgRef.current) {
-            fgRef.current.d3Force('charge')?.strength(settings.chargeStrength);
-            fgRef.current.d3Force('center')?.strength(0.05);
-
-            // Dynamic link distance based on target node level
-            fgRef.current.d3Force('link')?.distance((link: any) => {
-                // Check target level. If target is level 1, use level1LinkDistance
-                // If target is level 2, use level2LinkDistance
-                if (link.target.level === 1) return settings.level1LinkDistance;
-                return settings.level2LinkDistance;
-            });
-
-            // Add collision force to strictly prevent overlap
-            // Radius calculation: nodeVal * scale + padding
-            // We use a slightly larger radius to ensure labels also have some space
-            fgRef.current.d3Force('collide', forceCollide((node: any) => {
-                const scale = node.level === 0 ? 1.5 : (node.level === 1 ? settings.level1Size : settings.level2Size);
-                const baseRadius = node.val * scale;
-                // Dynamic collision radius from settings
-                const textWidth = (node.name?.length || 0) * 8;
-                return Math.max(baseRadius + settings.collisionRadius, textWidth / 2 + settings.collisionRadius * 0.7);
-            }).strength(1.0).iterations(8)); // More iterations for better collision resolution
-
-            // Note: react-force-graph-2d doesn't expose d3 directly in this scope easily for creating new forces
-            // But we can use the internal engine. 
-            // Actually, we can just set the force if we had the d3 reference.
-            // Since we don't have d3 imported, we rely on the graph's internal d3 instance if exposed, 
-            // or we just tune the existing forces better.
-            // If we really need collision, we'd need to import d3-force. 
-            // Let's stick to the charge strength first as it's the primary factor for "clustering".
-
-            // Gentle reheat - don't restart from scratch
-            fgRef.current.d3ReheatSimulation();
-
-            // Auto-center after a short delay to let simulation settle
-            setTimeout(() => {
-                if (fgRef.current && data.nodes.length > 0) {
-                    fgRef.current.zoomToFit(400, 28);
-                }
-            }, 300);
-        }
-    }, [settings.chargeStrength, settings.level1LinkDistance, settings.level2LinkDistance, settings.collisionRadius]);
-
-    // Initialize particle system - expanded coverage
-    useEffect(() => {
-        const particleCount = isMobile ? 50 : 200;
-        const newParticles: Particle[] = Array.from({ length: particleCount }, () => ({
-            // Expand distribution to 3x viewport size for zoom-out coverage
-            x: (Math.random() - 0.5) * dimensions.width * 3,
-            y: (Math.random() - 0.5) * dimensions.height * 3,
-            vx: (Math.random() - 0.5) * 0.3, // Slower movement
-            vy: (Math.random() - 0.5) * 0.3,
-            size: Math.random() * 2 + 0.3, // Varying sizes: 0.3-2.3px
-            opacity: Math.random() * 0.4 + 0.1, // 0.1-0.5 opacity
-            color: ['#ffffff', '#ffffff', '#3b82f6', '#8b5cf6', '#ec4899', '#a78bfa'][Math.floor(Math.random() * 6)]
-        }));
-        setParticles(newParticles);
-    }, [dimensions]);
-
-    const handleRefresh = () => {
-        // Force component to remount by changing key
-        setRefreshKey(prev => prev + 1);
-    };
-
-    const handleZoomIn = () => {
-        if (fgRef.current) {
-            fgRef.current.zoom(fgRef.current.zoom() * 1.5, 400);
-        }
-    };
-
-    const handleZoomOut = () => {
-        if (fgRef.current) {
-            fgRef.current.zoom(fgRef.current.zoom() / 1.5, 400);
-        }
-    };
-
-    // Removed visibleData memo to prevent layout jumps. 
-    // We now control visibility in the render loop.
-
-    if (!word) {
-        return (
-            <div className="h-full flex items-center justify-center text-neutral-500 bg-black font-light tracking-wider">
-                {t('graph.selectWord').toUpperCase()}
-            </div>
-        );
     }
 
+    const byId = new Map(data.nodes.map((n) => [n.id, n]));
+    const totals = Object.fromEntries(RELATION_GROUPS.map((g) => [g, 0])) as Record<RelationGroup, number>;
+    const nodes: AtlasNode[] = [{ ...center, group: null, rank: 0, ax: 0, ay: 0, fx: 0, fy: 0 }];
+
+    // Entries that exist in the dictionary first, then alphabetical.
+    const l1 = [...l1Group.entries()]
+        .filter(([id]) => byId.has(id))
+        .sort(([a], [b]) => Number(!!byId.get(a)!.placeholder) - Number(!!byId.get(b)!.placeholder) || a.localeCompare(b));
+    for (const [id, group] of l1) {
+        nodes.push({ ...byId.get(id)!, level: 1, group, rank: totals[group]++, ax: 0, ay: 0 });
+    }
+
+    const perParent = new Map<string, number>();
+    for (const [id, parentId] of l2Parent) {
+        const node = byId.get(id);
+        if (!node || l1Group.has(id) || !l1Group.has(parentId)) continue;
+        const rank = perParent.get(parentId) ?? 0;
+        perParent.set(parentId, rank + 1);
+        nodes.push({ ...node, level: 2, group: l1Group.get(parentId)!, parentId, rank, ax: 0, ay: 0 });
+    }
+
+    const known = new Set(nodes.map((n) => n.id));
+    const links: AtlasLink[] = [];
+    const seen = new Set<string>();
+    for (const link of data.links) {
+        const s = endpointId(link.source as string | { id: string });
+        const t = endpointId(link.target as string | { id: string });
+        if (!known.has(s) || !known.has(t)) continue;
+        const level = s === center.id ? 1 : 2;
+        const key = `${s}|${t}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        links.push({
+            source: s,
+            target: t,
+            group: level === 1 ? l1Group.get(t)! : groupOf(link.type),
+            level,
+            pending: link.status === 'pending',
+        });
+    }
+    return { centerId: center.id, nodes, links, totals };
+}
+
+interface Visibility {
+    hidden: Set<RelationGroup>;
+    expanded: Set<RelationGroup>;
+    secondDegree: boolean;
+}
+
+/** Nodes and links on screen, with layout anchors assigned for the visible sectors. */
+function visibleGraph(atlas: Atlas, vis: Visibility) {
+    const showL1 = (n: AtlasNode) => !vis.hidden.has(n.group!) && (vis.expanded.has(n.group!) || n.rank < GROUP_CAP);
+    const l1 = atlas.nodes.filter((n) => n.level === 1 && showL1(n));
+    const l1Ids = new Set(l1.map((n) => n.id));
+    const l2 = vis.secondDegree
+        ? atlas.nodes.filter((n) => n.level === 2 && n.parentId && l1Ids.has(n.parentId) && n.rank < L2_PER_PARENT)
+        : [];
+
+    const family = l1.filter((n) => n.group === 'family');
+    const familyRadius = family.length ? Math.max(58, 7 * family.length + 34) : 0;
+    family.forEach((n, i) => {
+        const a = (i / family.length) * Math.PI * 2 - Math.PI / 2;
+        n.ax = Math.cos(a) * familyRadius;
+        n.ay = Math.sin(a) * familyRadius;
+    });
+
+    const sectors = RELATION_GROUPS.filter((g) => g !== 'family' && l1.some((n) => n.group === g));
+    const sectorRadius = familyRadius + 170;
+    const anchors = new Map<RelationGroup, { x: number; y: number }>();
+    sectors.forEach((g, i) => {
+        const a = (i / sectors.length) * Math.PI * 2 - Math.PI / 3;
+        anchors.set(g, { x: Math.cos(a) * sectorRadius, y: Math.sin(a) * sectorRadius });
+    });
+    for (const n of l1) {
+        if (n.group === 'family') continue;
+        const anchor = anchors.get(n.group!)!;
+        n.ax = anchor.x;
+        n.ay = anchor.y;
+    }
+    const l1ById = new Map(l1.map((n) => [n.id, n]));
+    for (const n of l2) {
+        const parent = l1ById.get(n.parentId!)!;
+        n.ax = parent.ax * 1.5;
+        n.ay = parent.ay * 1.5;
+    }
+
+    for (const n of [...l1, ...l2]) {
+        n.ring = n.level === 2 ? sectorRadius * 1.5 : n.group === 'family' ? familyRadius : sectorRadius;
+    }
+
+    const nodes = [atlas.nodes[0], ...l1, ...l2];
+    const ids = new Set(nodes.map((n) => n.id));
+    const links = atlas.links.filter((l) => {
+        const s = endpointId(l.source), t = endpointId(l.target);
+        if (!ids.has(s) || !ids.has(t)) return false;
+        // Family membership is shown by the bubble, not by edges.
+        return !(l.level === 1 && l.group === 'family');
+    });
+    return { nodes, links, family, sectors, familyRadius, sectorRadius, anchors };
+}
+
+// ---------------------------------------------------------------------------
+// Drawing
+// ---------------------------------------------------------------------------
+
+const PALETTE: Record<Theme, {
+    bg: string; ink: string; muted: string; halo: string; centerRing: string; edgeAlpha: number;
+    bubbleFill: string; fills: Record<Familiarity | 'new', string>;
+}> = {
+    dark: {
+        bg: '#05070d', ink: '#eaf2ff', muted: '#8ca3c4', halo: 'rgba(5,7,13,0.92)', centerRing: '#38bdf8',
+        edgeAlpha: 0.5, bubbleFill: 'rgba(167,139,250,0.06)',
+        fills: { new: '#0e1525', seen: '#173252', weak: '#5a1f2b', learning: '#4a3711', mastered: '#124430' },
+    },
+    light: {
+        bg: '#f1ede4', ink: '#20302c', muted: '#61706b', halo: 'rgba(241,237,228,0.95)', centerRing: '#1b6c53',
+        edgeAlpha: 0.55, bubbleFill: 'rgba(139,92,246,0.05)',
+        fills: { new: '#fffdf8', seen: '#d7e9f5', weak: '#f5d7d4', learning: '#fbe7bf', mastered: '#d8eedb' },
+    },
+};
+
+const FAMILIARITY_ORDER: Array<Familiarity | 'new'> = ['new', 'seen', 'weak', 'learning', 'mastered'];
+
+/** "vt. 放弃, 抛弃, 遗弃" -> "放弃, 抛弃" */
+function shortGloss(translation?: string): string {
+    if (!translation) return '';
+    const text = translation.replace(/^\s*([a-z]+\.\s*)+/i, '').split(/[;；]/)[0];
+    const parts = text.split(/[,，]/).map((s) => s.trim()).filter(Boolean).slice(0, 2).join(', ');
+    return parts.length > 14 ? `${parts.slice(0, 13)}…` : parts;
+}
+
+export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGraphProps) {
+    const t = useTranslations('graph');
+    const { showHoverTooltip, showGraphTooltip } = useSettings();
+    const { theme } = useTheme();
+    const palette = PALETTE[theme];
+
+    const [data, setData] = useState<GraphData | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [familiarity, setFamiliarity] = useState<Record<string, Familiarity>>({});
+    const [hidden, setHidden] = useState<Set<RelationGroup>>(new Set());
+    const [expanded, setExpanded] = useState<Set<RelationGroup>>(new Set());
+    const [secondDegree, setSecondDegree] = useState(false);
+    const [hovered, setHovered] = useState<AtlasNode | null>(null);
+    const [size, setSize] = useState({ width: 0, height: 0 });
+    const [zoomK, setZoomK] = useState(1);
+
+    const containerRef = useRef<HTMLDivElement>(null);
+    const fgRef = useRef<ForceGraphMethods<NodeObject<AtlasNode>, LinkObject<AtlasNode, AtlasLink>> | undefined>(undefined);
+    const tooltipRef = useRef<HTMLDivElement>(null);
+    const pillRefs = useRef(new Map<RelationGroup, HTMLDivElement>());
+    const fittedRef = useRef(false);
+    const zoomFrame = useRef<number | null>(null);
+
+    // ---- data -------------------------------------------------------------
+    useEffect(() => {
+        if (!word) { setData(null); return; }
+        const controller = new AbortController();
+        setLoading(true);
+        setExpanded(new Set());
+        fittedRef.current = false;
+        fetch(`/api/fission?word=${encodeURIComponent(word)}`, { signal: controller.signal })
+            .then((res) => res.json() as Promise<GraphData>)
+            .then((graph) => setData(graph))
+            .catch((err) => { if (err?.name !== 'AbortError') setData({ nodes: [], links: [] }); })
+            .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+        return () => controller.abort();
+    }, [word]);
+
+    useEffect(() => {
+        if (!data?.nodes.length) { setFamiliarity({}); return; }
+        const controller = new AbortController();
+        fetch('/api/user/word-states', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ words: data.nodes.map((n) => n.id) }),
+            signal: controller.signal,
+        })
+            .then((res) => (res.ok ? res.json() : { states: {} }))
+            .then((body: { states?: Record<string, Familiarity> }) => setFamiliarity(body.states ?? {}))
+            .catch(() => undefined);
+        return () => controller.abort();
+    }, [data]);
+
+    const atlas = useMemo(() => (data ? buildAtlas(data) : null), [data]);
+    const view = useMemo(
+        () => (atlas ? visibleGraph(atlas, { hidden, expanded, secondDegree }) : null),
+        [atlas, hidden, expanded, secondDegree],
+    );
+    const graphData = useMemo(() => (view ? { nodes: view.nodes, links: view.links } : { nodes: [], links: [] }), [view]);
+
+    const neighbours = useMemo(() => {
+        const map = new Map<string, Set<string>>();
+        for (const l of view?.links ?? []) {
+            const s = endpointId(l.source), tId = endpointId(l.target);
+            if (!map.has(s)) map.set(s, new Set());
+            if (!map.has(tId)) map.set(tId, new Set());
+            map.get(s)!.add(tId);
+            map.get(tId)!.add(s);
+        }
+        return map;
+    }, [view]);
+
+    // ---- size / keyboard -----------------------------------------------------
+    useEffect(() => {
+        const el = containerRef.current;
+        if (!el) return;
+        const observer = new ResizeObserver(([entry]) => {
+            const { width, height } = entry.contentRect;
+            setSize({ width: Math.round(width), height: Math.round(height) });
+        });
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, []);
+
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            const target = e.target as HTMLElement | null;
+            if (e.repeat || target?.closest('input, textarea, [contenteditable="true"]')) return;
+            if (e.key.toLowerCase() === 'h') setSecondDegree((v) => !v);
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, []);
+
+    // ---- forces --------------------------------------------------------------
+    // The graph instance appears only after its chunk loads, so this also runs from onEngineTick;
+    // appliedFor makes it a no-op once the current view is configured.
+    const appliedFor = useRef<object | null>(null);
+    const applyForces = useCallback(() => {
+        const fg = fgRef.current;
+        if (!fg || !view || appliedFor.current === view) return;
+        appliedFor.current = view;
+        fittedRef.current = false;
+        fg.d3Force('center', null);
+        fg.d3Force('charge')?.strength(-80).distanceMax(260);
+        fg.d3Force('link')
+            ?.distance((l: AtlasLink) => (l.level === 1 ? Math.hypot((l.target as AtlasNode).ax, (l.target as AtlasNode).ay) : 42))
+            .strength((l: AtlasLink) => (l.level === 1 ? 0.02 : 0.35));
+        fg.d3Force('x', forceX<AtlasNode>((n) => n.ax).strength((n) => (n.level === 0 ? 0 : n.level === 1 ? 0.12 : 0.06)));
+        fg.d3Force('y', forceY<AtlasNode>((n) => n.ay).strength((n) => (n.level === 0 ? 0 : n.level === 1 ? 0.12 : 0.06)));
+        fg.d3Force('ring', forceRadial<AtlasNode>((n) => n.ring ?? 0, 0, 0).strength((n) => (n.level === 0 ? 0 : 0.18)));
+        fg.d3Force('collide', forceCollide<AtlasNode>((n) => {
+            if (n.level === 0) return RADIUS.center + 14;
+            if (n.level === 2) return RADIUS.l2 + 10;
+            return RADIUS.l1 + Math.min(34, n.name.length * 3.2) + 6;
+        }).strength(0.9).iterations(3));
+        fg.d3ReheatSimulation();
+    }, [view]);
+    useEffect(() => { applyForces(); }, [applyForces]);
+
+    const fit = useCallback((ms = 500) => fgRef.current?.zoomToFit(ms, 64), []);
+
+    // Panels are resizable: keep the graph framed when the available space changes.
+    useEffect(() => {
+        if (!fittedRef.current) return;
+        const timer = window.setTimeout(() => fit(250), 150);
+        return () => window.clearTimeout(timer);
+    }, [size, fit]);
+
+    const relayout = useCallback(() => {
+        for (const n of view?.nodes ?? []) {
+            if (n.level === 0) continue;
+            n.fx = undefined;
+            n.fy = undefined;
+            n.x = n.ax + (Math.random() - 0.5) * 20;
+            n.y = n.ay + (Math.random() - 0.5) * 20;
+        }
+        fittedRef.current = false;
+        fgRef.current?.d3ReheatSimulation();
+    }, [view]);
+
+    const setZoom = (k: number) => fgRef.current?.zoom(Math.min(4, Math.max(0.25, k)), 250);
+
+    // ---- per-frame overlays (group pills, tooltip) ---------------------------------
+    const placeOverlays = useCallback(() => {
+        const fg = fgRef.current;
+        if (!fg || !view) return;
+        for (const [group, el] of pillRefs.current) {
+            const members = view.nodes.filter((n) => n.level === 1 && n.group === group && n.x !== undefined);
+            if (!members.length) { el.style.visibility = 'hidden'; continue; }
+            let x: number, y: number;
+            if (group === 'family') {
+                const r = Math.max(...members.map((n) => Math.hypot(n.x!, n.y!))) + RADIUS.l1 + 16;
+                x = 0; y = -r;
+            } else {
+                const anchor = view.anchors.get(group);
+                if (!anchor) { el.style.visibility = 'hidden'; continue; }
+                const d = Math.hypot(anchor.x, anchor.y) || 1;
+                const ux = anchor.x / d, uy = anchor.y / d;
+                const reach = Math.max(...members.map((n) => n.x! * ux + n.y! * uy));
+                x = ux * (reach + 34);
+                y = uy * (reach + 34);
+            }
+            const p = fg.graph2ScreenCoords(x, y);
+            const px = Math.min(Math.max(p.x, 70), size.width - 70);
+            const py = Math.min(Math.max(p.y, 14), size.height - 50);
+            el.style.visibility = 'visible';
+            el.style.transform = `translate(${px}px, ${py}px) translate(-50%, -50%)`;
+        }
+        if (hovered && tooltipRef.current && hovered.x !== undefined) {
+            const p = fg.graph2ScreenCoords(hovered.x, hovered.y ?? 0);
+            tooltipRef.current.style.transform = `translate(${p.x}px, ${p.y - 18}px) translate(-50%, -100%)`;
+        }
+    }, [view, hovered, size]);
+
+    // ---- canvas painters -------------------------------------------------------
+    const drawFamilyBubble = useCallback((ctx: CanvasRenderingContext2D, scale: number) => {
+        if (!view?.family.length) return;
+        const r = Math.max(...view.family.map((n) => Math.hypot(n.x ?? n.ax, n.y ?? n.ay))) + RADIUS.l1 + 14;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.fillStyle = palette.bubbleFill;
+        ctx.fill();
+        ctx.setLineDash([6 / scale, 5 / scale]);
+        ctx.lineWidth = 1.2 / scale;
+        ctx.strokeStyle = GROUP_COLORS.family;
+        ctx.globalAlpha = 0.65;
+        ctx.stroke();
+        ctx.restore();
+    }, [view, palette]);
+
+    const paintLink = useCallback((link: AtlasLink, ctx: CanvasRenderingContext2D, scale: number) => {
+        const s = link.source as AtlasNode, e = link.target as AtlasNode;
+        if (s.x === undefined || e.x === undefined) return;
+        const lit = hovered && (s.id === hovered.id || e.id === hovered.id);
+        const dim = hovered && !lit;
+        ctx.save();
+        ctx.strokeStyle = GROUP_COLORS[link.group];
+        ctx.globalAlpha = lit ? 0.95 : dim ? 0.12 : palette.edgeAlpha * (link.level === 2 ? 0.55 : 1);
+        ctx.lineWidth = (lit ? 2 : link.level === 2 ? 0.8 : 1.3) / scale;
+        if (link.pending) ctx.setLineDash([5 / scale, 4 / scale]);
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y!);
+        ctx.lineTo(e.x, e.y!);
+        ctx.stroke();
+        ctx.restore();
+    }, [hovered, palette]);
+
+    const paintNode = useCallback((node: AtlasNode, ctx: CanvasRenderingContext2D, scale: number) => {
+        const x = node.x ?? 0, y = node.y ?? 0;
+        const isHovered = hovered?.id === node.id;
+        const dim = hovered && !isHovered && !neighbours.get(hovered.id)?.has(node.id) && node.level !== 0;
+        const fill = palette.fills[familiarity[node.id] ?? 'new'];
+        ctx.save();
+        if (dim) ctx.globalAlpha = 0.35;
+
+        if (node.level === 0) {
+            ctx.beginPath();
+            ctx.arc(x, y, RADIUS.center + 5, 0, Math.PI * 2);
+            ctx.strokeStyle = palette.centerRing;
+            ctx.lineWidth = 2.5 / scale;
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(x, y, RADIUS.center, 0, Math.PI * 2);
+            ctx.fillStyle = fill;
+            ctx.fill();
+            ctx.lineWidth = 1.5 / scale;
+            ctx.stroke();
+        } else if (node.level === 1) {
+            const color = GROUP_COLORS[node.group!];
+            ctx.beginPath();
+            ctx.arc(x, y, RADIUS.l1 * (isHovered ? 1.25 : 1), 0, Math.PI * 2);
+            if (node.placeholder) {
+                ctx.setLineDash([3 / scale, 3 / scale]);
+                ctx.strokeStyle = palette.muted;
+            } else {
+                ctx.fillStyle = fill;
+                ctx.fill();
+                ctx.strokeStyle = color;
+            }
+            ctx.lineWidth = 2 / scale;
+            ctx.stroke();
+        } else {
+            ctx.beginPath();
+            ctx.arc(x, y, RADIUS.l2 * (isHovered ? 1.4 : 1), 0, Math.PI * 2);
+            ctx.fillStyle = GROUP_COLORS[node.group!];
+            ctx.globalAlpha *= node.placeholder ? 0.35 : 0.7;
+            ctx.fill();
+        }
+        ctx.restore();
+    }, [hovered, neighbours, familiarity, palette]);
+
+    const paintLabels = useCallback((ctx: CanvasRenderingContext2D, scale: number) => {
+        if (!view) return;
+        const showGloss = scale >= 1.15;
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.lineJoin = 'round';
+        for (const node of view.nodes) {
+            if (node.x === undefined) continue;
+            const isHovered = hovered?.id === node.id;
+            const near = hovered && (isHovered || neighbours.get(hovered.id)?.has(node.id));
+            if (node.level === 2 && scale < 1.4 && !near) continue;
+            const r = node.level === 0 ? RADIUS.center + 7 : node.level === 1 ? RADIUS.l1 : RADIUS.l2;
+            const px = node.level === 0 ? 14 : node.level === 1 ? 12 : 10;
+            const dim = hovered && !near && node.level !== 0;
+            ctx.globalAlpha = dim ? 0.35 : 1;
+            ctx.font = `${node.level === 0 ? '600 ' : ''}${px / scale}px Geist, "Noto Sans SC", system-ui, sans-serif`;
+            const y = node.y! + r + 3 / scale;
+            ctx.strokeStyle = palette.halo;
+            ctx.lineWidth = 3.5 / scale;
+            ctx.strokeText(node.name, node.x, y);
+            ctx.fillStyle = node.placeholder ? palette.muted : palette.ink;
+            ctx.fillText(node.name, node.x, y);
+            if (node.level < 2 && (showGloss || node.level === 0)) {
+                const gloss = shortGloss(node.translation);
+                if (gloss) {
+                    ctx.font = `${10 / scale}px "Noto Sans SC", system-ui, sans-serif`;
+                    const gy = y + (px + 2) / scale;
+                    ctx.strokeText(gloss, node.x, gy);
+                    ctx.fillStyle = palette.muted;
+                    ctx.fillText(gloss, node.x, gy);
+                }
+            }
+        }
+        ctx.restore();
+    }, [view, hovered, neighbours, palette]);
+
+    // ---- render ----------------------------------------------------------------
+    if (!word) {
+        return <div className="flex h-full items-center justify-center text-sm tracking-wide text-neutral-500">{t('selectWord')}</div>;
+    }
+
+    const totals = atlas?.totals;
+    const totalWords = atlas ? atlas.nodes.length - 1 : 0;
+    const shownWords = view ? view.nodes.length - 1 : 0;
+    const groupsPresent = RELATION_GROUPS.filter((g) => (totals?.[g] ?? 0) > 0);
+    const groupLabel = (g: RelationGroup) => t(`atlas.groups.${g}`);
+
     return (
-        <div ref={containerRef} className="absolute inset-0 bg-black overflow-hidden">
-            {/* Enhanced Gradient Background - creates depth */}
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-neutral-950 via-black to-black opacity-60 pointer-events-none"></div>
-
-            {/* Controls - Bottom bar on mobile, floating panel on desktop */}
-            {isMobile ? (
-                <div className="absolute bottom-0 left-0 right-0 z-10 flex items-center justify-center gap-3 px-4 py-3 bg-neutral-900/90 backdrop-blur-md border-t border-neutral-800 safe-area-bottom">
-                    <button
-                        onClick={handleRefresh}
-                        className="mobile-touch-target flex items-center justify-center bg-neutral-800 text-white rounded-lg hover:bg-neutral-700 transition-colors border border-neutral-700"
-                        title={t('graph.refreshGraph')}
-                    >
-                        <RefreshCw size={20} />
-                    </button>
-                    <button
-                        onClick={handleZoomIn}
-                        className="mobile-touch-target flex items-center justify-center bg-neutral-800 text-white rounded-lg hover:bg-neutral-700 transition-colors border border-neutral-700"
-                        title={t('graph.zoomIn')}
-                    >
-                        <ZoomIn size={20} />
-                    </button>
-                    <button
-                        onClick={handleZoomOut}
-                        className="mobile-touch-target flex items-center justify-center bg-neutral-800 text-white rounded-lg hover:bg-neutral-700 transition-colors border border-neutral-700"
-                        title={t('graph.zoomOut')}
-                    >
-                        <ZoomOut size={20} />
-                    </button>
-                    <button
-                        onClick={() => setShowLevel2(!showLevel2)}
-                        className={`mobile-touch-target flex items-center justify-center rounded-lg transition-colors border border-neutral-700 ${!showLevel2 ? 'bg-blue-600 text-white' : 'bg-neutral-800 text-white hover:bg-neutral-700'}`}
-                        title={t('graph.toggleSecondaryLinks')}
-                    >
-                        {showLevel2 ? <Eye size={20} /> : <EyeOff size={20} />}
-                    </button>
-                    <button
-                        onClick={() => setShowSettings(!showSettings)}
-                        className={`mobile-touch-target flex items-center justify-center rounded-lg transition-colors border border-neutral-700 ${showSettings ? 'bg-blue-600 text-white' : 'bg-neutral-800 text-white hover:bg-neutral-700'}`}
-                        title={t('graph.adjustSettings')}
-                    >
-                        <Settings size={20} />
-                    </button>
-                </div>
-            ) : (
-                <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
-                    {/* Refresh */}
-                    <button
-                        onClick={handleRefresh}
-                        className="p-2 bg-neutral-900/80 text-white rounded-lg hover:bg-neutral-800 transition-colors border border-neutral-800 backdrop-blur-sm"
-                        title={t('graph.refreshGraph')}
-                    >
-                        <RefreshCw size={20} />
-                    </button>
-                    <button
-                        onClick={handleZoomIn}
-                        className="p-2 bg-neutral-900/80 text-white rounded-lg hover:bg-neutral-800 transition-colors border border-neutral-800 backdrop-blur-sm"
-                        title={t('graph.zoomIn')}
-                    >
-                        <ZoomIn size={20} />
-                    </button>
-                    <button
-                        onClick={handleZoomOut}
-                        className="p-2 bg-neutral-900/80 text-white rounded-lg hover:bg-neutral-800 transition-colors border border-neutral-800 backdrop-blur-sm"
-                        title={t('graph.zoomOut')}
-                    >
-                        <ZoomOut size={20} />
-                    </button>
-                    <button
-                        onClick={() => setShowLevel2(!showLevel2)}
-                        className={`p-2 rounded-lg transition-colors border border-neutral-800 backdrop-blur-sm ${!showLevel2 ? 'bg-blue-600 text-white' : 'bg-neutral-900/80 text-white hover:bg-neutral-800'}`}
-                        title={`${t('graph.toggleSecondaryLinks')}(H)`}
-                    >
-                        {showLevel2 ? <Eye size={20} /> : <EyeOff size={20} />}
-                    </button>
-                    <button
-                        onClick={() => setShowSettings(!showSettings)}
-                        className={`p-2 rounded-lg transition-colors border border-neutral-800 backdrop-blur-sm ${showSettings ? 'bg-blue-600 text-white' : 'bg-neutral-900/80 text-white hover:bg-neutral-800'}`}
-                        title={t('graph.adjustSettings')}
-                    >
-                        <Settings size={20} />
-                    </button>
-                </div>
-            )}
-
-            {/* Settings Panel */}
-            {showSettings && (
-                <div className={`absolute z-20 w-64 bg-neutral-900/95 backdrop-blur-md border border-neutral-800 rounded-xl p-4 shadow-2xl ${isMobile ? 'bottom-16 left-1/2 -translate-x-1/2 max-h-[60vh] overflow-y-auto mobile-scroll' : 'top-4 right-16'}`}>
-                    <div className="flex justify-between items-center mb-4 border-b border-neutral-800 pb-2">
-                        <h3 className="text-white font-medium text-sm">{t('graph.graphSettings')}</h3>
-                        <button onClick={() => setShowSettings(false)} className="text-neutral-400 hover:text-white">
-                            <X size={16} />
-                        </button>
-                    </div>
-
-                    <div className="space-y-4">
-                        <div className="space-y-1">
-                            <div className="flex justify-between text-xs text-neutral-400">
-                                <span>{t('graph.level1Size')}</span>
-                                <span>{uiSettings.level1Size.toFixed(1)}x</span>
-                            </div>
-                            <input
-                                type="range"
-                                min="0.5"
-                                max="3.0"
-                                step="0.1"
-                                value={uiSettings.level1Size}
-                                onChange={(e) => setUiSettings({ ...uiSettings, level1Size: parseFloat(e.target.value) })}
-                                onMouseUp={() => setSettings(uiSettings)}
-                                onTouchEnd={() => setSettings(uiSettings)}
-                                className="w-full h-1 bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                            />
-                        </div>
-
-                        <div className="space-y-1">
-                            <div className="flex justify-between text-xs text-neutral-400">
-                                <span>{t('graph.level2Size')}</span>
-                                <span>{uiSettings.level2Size.toFixed(1)}x</span>
-                            </div>
-                            <input
-                                type="range"
-                                min="0.3"
-                                max="2.0"
-                                step="0.1"
-                                value={uiSettings.level2Size}
-                                onChange={(e) => setUiSettings({ ...uiSettings, level2Size: parseFloat(e.target.value) })}
-                                onMouseUp={() => setSettings(uiSettings)}
-                                onTouchEnd={() => setSettings(uiSettings)}
-                                className="w-full h-1 bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                            />
-                        </div>
-
-                        <div className="space-y-1">
-                            <div className="flex justify-between text-xs text-neutral-400">
-                                <span>{t('graph.level1Font')}</span>
-                                <span>{uiSettings.level1FontSize}px</span>
-                            </div>
-                            <input
-                                type="range"
-                                min="8"
-                                max="24"
-                                step="1"
-                                value={uiSettings.level1FontSize}
-                                onChange={(e) => setUiSettings({ ...uiSettings, level1FontSize: parseInt(e.target.value) })}
-                                onMouseUp={() => setSettings(uiSettings)}
-                                onTouchEnd={() => setSettings(uiSettings)}
-                                className="w-full h-1 bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                            />
-                        </div>
-
-                        <div className="space-y-1">
-                            <div className="flex justify-between text-xs text-neutral-400">
-                                <span>{t('graph.level2Font')}</span>
-                                <span>{uiSettings.level2FontSize}px</span>
-                            </div>
-                            <input
-                                type="range"
-                                min="6"
-                                max="18"
-                                step="1"
-                                value={uiSettings.level2FontSize}
-                                onChange={(e) => setUiSettings({ ...uiSettings, level2FontSize: parseInt(e.target.value) })}
-                                onMouseUp={() => setSettings(uiSettings)}
-                                onTouchEnd={() => setSettings(uiSettings)}
-                                className="w-full h-1 bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                            />
-                        </div>
-
-                        <div className="space-y-1">
-                            <div className="flex justify-between text-xs text-neutral-400">
-                                <span>{t('graph.repulsion')}</span>
-                                <span>{uiSettings.chargeStrength}</span>
-                            </div>
-                            <input
-                                type="range"
-                                min="-15000"
-                                max="0"
-                                step="50"
-                                value={uiSettings.chargeStrength}
-                                onChange={(e) => setUiSettings({ ...uiSettings, chargeStrength: parseInt(e.target.value) })}
-                                onMouseUp={() => setSettings(uiSettings)}
-                                onTouchEnd={() => setSettings(uiSettings)}
-                                className="w-full h-1 bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                            />
-                        </div>
-
-                        <div className="space-y-1">
-                            <div className="flex justify-between text-xs text-neutral-400">
-                                <span>{t('graph.l1Distance')}</span>
-                                <span>{uiSettings.level1LinkDistance}</span>
-                            </div>
-                            <input
-                                type="range"
-                                min="50"
-                                max="600"
-                                step="1"
-                                value={uiSettings.level1LinkDistance}
-                                onChange={(e) => setUiSettings({ ...uiSettings, level1LinkDistance: parseInt(e.target.value) })}
-                                onMouseUp={() => setSettings(uiSettings)}
-                                onTouchEnd={() => setSettings(uiSettings)}
-                                className="w-full h-1 bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                            />
-                        </div>
-
-                        <div className="space-y-1">
-                            <div className="flex justify-between text-xs text-neutral-400">
-                                <span>{t('graph.l2Distance')}</span>
-                                <span>{uiSettings.level2LinkDistance}</span>
-                            </div>
-                            <input
-                                type="range"
-                                min="20"
-                                max="400"
-                                step="5"
-                                value={uiSettings.level2LinkDistance}
-                                onChange={(e) => setUiSettings({ ...uiSettings, level2LinkDistance: parseInt(e.target.value) })}
-                                onMouseUp={() => setSettings(uiSettings)}
-                                onTouchEnd={() => setSettings(uiSettings)}
-                                className="w-full h-1 bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                            />
-                        </div>
-
-                        <div className="space-y-1">
-                            <div className="flex justify-between text-xs text-neutral-400">
-                                <span>{t('graph.collisionPadding')}</span>
-                                <span>{uiSettings.collisionRadius}px</span>
-                            </div>
-                            <input
-                                type="range"
-                                min="10"
-                                max="100"
-                                step="5"
-                                value={uiSettings.collisionRadius}
-                                onChange={(e) => setUiSettings({ ...uiSettings, collisionRadius: parseInt(e.target.value) })}
-                                onMouseUp={() => setSettings(uiSettings)}
-                                onTouchEnd={() => setSettings(uiSettings)}
-                                className="w-full h-1 bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                            />
-                        </div>
-
-                        {/* Lock Node Toggle */}
-                        <div className="flex items-center justify-between py-2 border-t border-neutral-800 mt-2">
-                            <span className="text-xs text-neutral-400">{t('graph.lockNodeAfterDrag')}</span>
-                            <button
-                                onClick={() => {
-                                    const newSettings = { ...uiSettings, lockNodeOnDrag: !uiSettings.lockNodeOnDrag };
-                                    setUiSettings(newSettings);
-                                    setSettings(newSettings);
-                                }}
-                                className={`relative w-10 h-5 rounded-full transition-colors ${uiSettings.lockNodeOnDrag ? 'bg-blue-600' : 'bg-neutral-700'}`}
-                            >
-                                <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${uiSettings.lockNodeOnDrag ? 'translate-x-5' : ''}`} />
-                            </button>
-                        </div>
-
-                        {/* Reset to Defaults Button */}
-                        <button
-                            onClick={resetToDefaults}
-                            className="w-full mt-4 px-3 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white text-xs font-medium rounded-lg transition-colors border border-neutral-700"
-                        >
-                            {t('graph.resetToDefaults')}
-                        </button>
+        <div className="absolute inset-0 flex flex-col overflow-hidden" style={{ background: palette.bg }}>
+            {/* Toolbar */}
+            <div className="z-20 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-neutral-800 bg-neutral-950/85 px-3 py-2 backdrop-blur-md">
+                <div className="min-w-0">
+                    <div className="text-[9px] font-bold uppercase tracking-[0.24em] text-emerald-400">{t('atlas.eyebrow')}</div>
+                    <div className="flex items-baseline gap-2">
+                        <span className="truncate text-lg leading-tight text-white" style={{ fontFamily: "'Instrument Serif', serif" }}>{word}</span>
+                        {atlas && <span className="whitespace-nowrap text-[11px] text-neutral-500">{t('atlas.stats', { shown: shownWords, total: totalWords })}</span>}
                     </div>
                 </div>
-            )}
-
-            {/* Floating Legend - hidden on mobile */}
-            {!isMobile && showConnectionMeanings && (
-            <div className="absolute bottom-4 left-4 z-20 bg-neutral-900/90 backdrop-blur-md rounded-lg p-3 border border-neutral-800 shadow-2xl max-w-xs">
-                <div className="text-xs font-semibold text-neutral-400 mb-2 uppercase tracking-wider">{t('graph.relationTypes')}</div>
-                <div className="flex flex-col gap-2">
-                    {presentTypes.length > 0 ? presentTypes.map((type) => {
-                        const off = hiddenTypes.has(type);
+                <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
+                    {groupsPresent.map((g) => {
+                        const on = !hidden.has(g);
                         return (
-                            <button key={type}
-                                onClick={() => setHiddenTypes(prev => {
+                            <button
+                                key={g}
+                                type="button"
+                                aria-pressed={on}
+                                onClick={() => setHidden((prev) => {
                                     const next = new Set(prev);
-                                    if (next.has(type)) next.delete(type); else next.add(type);
+                                    if (next.has(g)) next.delete(g); else next.add(g);
                                     return next;
                                 })}
-                                className={`flex items-center gap-2 text-left transition-opacity ${off ? 'opacity-35' : 'opacity-100'}`}>
-                                <span className="w-3 h-3 rounded-full flex-shrink-0"
-                                    style={{ backgroundColor: (RELATION_COLORS as any)[type] || '#9ca3af' }} />
-                                <span className="text-xs font-medium text-neutral-300">{t(`graph.relations.${type}`)}</span>
+                                className={`inline-flex items-center gap-1.5 rounded border px-2 py-1 text-[11px] leading-none transition-colors hover:bg-neutral-800 ${on ? 'font-semibold text-neutral-100' : 'border-neutral-800 text-neutral-500'}`}
+                                style={on ? { borderColor: GROUP_COLORS[g] } : undefined}
+                            >
+                                <span className="h-2 w-2 rounded-full" style={{ background: GROUP_COLORS[g], opacity: on ? 1 : 0.4 }} />
+                                {groupLabel(g)}
+                                <span className="font-normal text-neutral-500">{totals![g]}</span>
                             </button>
                         );
-                    }) : (
-                        <div className="text-[10px] text-neutral-500">{t('graph.selectWord')}</div>
-                    )}
-                    <div className="flex items-center gap-2 mt-1 pt-1.5 border-t border-neutral-800">
-                        <span className="inline-block w-6 border-t border-dashed border-neutral-500" />
-                        <span className="text-[10px] text-neutral-500">{t('graph.pending')} / {t('graph.placeholder')}</span>
-                    </div>
+                    })}
+                    <button
+                        type="button"
+                        aria-pressed={secondDegree}
+                        title={t('atlas.secondDegreeHint')}
+                        onClick={() => setSecondDegree((v) => !v)}
+                        className={`rounded border px-2 py-1 text-[11px] leading-none transition-colors ${secondDegree ? 'border-neutral-600 bg-neutral-800 text-neutral-100' : 'border-neutral-800 text-neutral-500 hover:bg-neutral-800'}`}
+                    >
+                        {t('atlas.secondDegree')}
+                    </button>
                 </div>
             </div>
-            )}
 
-            <ForceGraph2D
-                key={`panel-${word}-${refreshKey}`} // Include refreshKey to force remount on refresh
-                ref={fgRef}
-                width={dimensions.width}
-                height={dimensions.height}
-                graphData={filteredData}
-                nodeLabel={() => ''}
-                nodeColor="color"
-                nodeVal={(node: any) => node.level === 0 ? 28 : (node.level === 1 ? 16 : 6)}
-
-                // Generous hit-testing area covering the big sphere
-                nodePointerAreaPaint={(node: any, color, ctx) => {
-                    if (!showLevel2 && node.level === 2) return;
-                    const x = node.x ?? 0;
-                    const y = node.y ?? 0;
-                    const size = node.level === 0 ? 36 : (node.level === 1 ? 26 : 14);
-                    ctx.fillStyle = color;
-                    ctx.beginPath();
-                    ctx.arc(x, y, size, 0, 2 * Math.PI, false);
-                    ctx.fill();
-                }}
-                linkColor="color"
-                linkWidth={1.5}
-                backgroundColor="#000000"
-
-                // Advanced physics for organic movement
-                d3VelocityDecay={0.15}
-                d3AlphaDecay={0.015}
-                cooldownTicks={100}
-                warmupTicks={100} // Pre-warm enabled for stability
-
-                // Forces to fix central node
-
-
-                onNodeHover={(node: any) => {
-                    // Skip interaction for hidden L2 nodes
-                    if (!showLevel2 && node?.level === 2) {
-                        setHoveredNode(null);
-                        if (containerRef.current) {
-                            containerRef.current.style.cursor = 'default';
-                        }
-                        return;
-                    }
-                    setHoveredNode(node || null);
-                    if (containerRef.current) {
-                        containerRef.current.style.cursor = node ? 'pointer' : 'default';
-                    }
-                }}
-
-                onNodeClick={(node: any) => {
-                    // Skip click for hidden L2 nodes
-                    if (!showLevel2 && node?.level === 2) return;
-                    if (onNodeClick) {
-                        onNodeClick(node.id);
-                    }
-                }}
-
-                onNodeDrag={(node: any) => {
-                    // Prevent dragging hidden L2 nodes by resetting their position
-                    if (!showLevel2 && node?.level === 2) {
-                        return false;
-                    }
-                }}
-
-                onNodeDragEnd={(node: any) => {
-                    // Only fix node position if lockNodeOnDrag is enabled
-                    if (settings.lockNodeOnDrag && node) {
-                        node.fx = node.x;
-                        node.fy = node.y;
-                    }
-                }}
-
-                nodeCanvasObject={(node, ctx, globalScale) => {
-                    // Visibility check
-                    if (!showLevel2 && node.level === 2) return;
-
-                    const label = node.name;
-                    const x = node.x ?? 0;
-                    const y = node.y ?? 0;
-                    const time = Date.now() / 1000;
-
-                    // Fix central node position
-                    if (node.level === 0) {
-                        node.fx = 0;
-                        node.fy = 0;
-                    }
-
-                    const isHovered = hoveredNode && hoveredNode.id === node.id;
-                    const isNeighbor = hoveredNode && data.links.some((link: any) =>
-                        (link.source === hoveredNode.id && link.target === node.id) ||
-                        (link.target === hoveredNode.id && link.source === node.id)
-                    );
-
-                    const scale = isHovered ? 1.3 : isNeighbor ? 1.15 : 1;
-                    const pulse = node.level === 0 ? Math.sin(time + (node.val || 0)) * 0.15 + 1 : 1;
-
-                    // Central Node - Dominant & Fixed
-                    if (node.level === 0) {
-                        // Reduced outer glow (pulsing)
-                        const gradient = ctx.createRadialGradient(x, y, 0, x, y, node.val * 3 * pulse);
-                        gradient.addColorStop(0, 'rgba(255, 255, 255, 0.4)');
-                        gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.2)');
-                        gradient.addColorStop(1, 'rgba(0,0,0,0)');
-                        ctx.fillStyle = gradient;
-                        ctx.beginPath();
-                        ctx.arc(x, y, node.val * 3 * pulse, 0, 2 * Math.PI);
-                        ctx.fill();
-
-                        // Core with shadow for depth - Smaller
-                        ctx.fillStyle = '#ffffff';
-                        if (!isMobile) {
-                            ctx.shadowColor = '#ffffff';
-                            ctx.shadowBlur = 15 * pulse;
-                        }
-                        ctx.beginPath();
-                        ctx.arc(x, y, node.val * 0.8 * scale, 0, 2 * Math.PI);
-                        ctx.fill();
-                        if (!isMobile) {
-                            ctx.shadowBlur = 0;
-                        }
-
-                        // Colored ring - Smaller
-                        ctx.strokeStyle = node.color || '#3b82f6';
-                        ctx.lineWidth = 3 / globalScale;
-                        ctx.beginPath();
-                        ctx.arc(x, y, node.val * 1.1 * scale, 0, 2 * Math.PI);
-                        ctx.stroke();
-
-                    } else if (node.placeholder) {
-                        // 待建占位词：灰色虚线圈
-                        ctx.strokeStyle = '#9ca3af';
-                        ctx.setLineDash([3, 3]);
-                        ctx.lineWidth = 1.5 / globalScale;
-                        ctx.beginPath();
-                        ctx.arc(x, y, (node.val || 5) * 1.5 * scale, 0, 2 * Math.PI);
-                        ctx.stroke();
-                        ctx.setLineDash([]);
-                        ctx.fillStyle = 'rgba(156,163,175,.22)';
-                        ctx.beginPath();
-                        ctx.arc(x, y, (node.val || 5) * 0.9 * scale, 0, 2 * Math.PI);
-                        ctx.fill();
-                    } else {
-                        // Level 1 & 2 nodes - Visual hierarchy
-                        // Level 1: Direct connections (Larger)
-                        // Level 2: Secondary connections (Smaller)
-                        const isLevel1 = node.level === 1;
-
-                        // Size multipliers from settings
-                        const sizeMultiplier = isLevel1 ? settings.level1Size : settings.level2Size;
-                        const brightness = isLevel1 ? 0.8 : 0.4;
-                        const glowSize = isLevel1 ? 4.0 : 2.5;
-
-                        // Glow
-                        const gradient = ctx.createRadialGradient(x, y, 0, x, y, node.val * glowSize * scale * sizeMultiplier);
-                        const nodeColor = node.color || '#fff';
-                        gradient.addColorStop(0, nodeColor);
-                        gradient.addColorStop(1, 'rgba(0,0,0,0)');
-                        ctx.globalAlpha = brightness * (isHovered || isNeighbor ? 1.2 : 1);
-                        ctx.fillStyle = gradient;
-                        ctx.beginPath();
-                        ctx.arc(x, y, node.val * glowSize * scale * sizeMultiplier, 0, 2 * Math.PI);
-                        ctx.fill();
-
-                        // Core
-                        ctx.fillStyle = nodeColor;
-                        ctx.beginPath();
-                        ctx.arc(x, y, node.val * 0.9 * scale * sizeMultiplier, 0, 2 * Math.PI);
-                        ctx.fill();
-
-                        // Inner highlight
-                        ctx.fillStyle = '#fff';
-                        ctx.beginPath();
-                        ctx.arc(x, y, node.val * 0.35 * scale * sizeMultiplier, 0, 2 * Math.PI);
-                        ctx.fill();
-                        ctx.globalAlpha = 1;
-                    }
-
-                    // Label drawing moved to onRenderFramePost to ensure top layer z-index
-                }}
-
-
-
-
-                linkCanvasObject={(link, ctx, globalScale) => {
-                    const start = link.source as any;
-                    const end = link.target as any;
-
-                    if (typeof start !== 'object' || typeof end !== 'object') return;
-                    if (!showLevel2 && (start.level === 2 || end.level === 2)) return;
-
-                    const isHighlighted = hoveredNode && (
-                        start.id === hoveredNode.id || end.id === hoveredNode.id
-                    );
-
-                    const isL2 = (start.level === 2 || end.level === 2);
-                    const linkColor = link.color || '#3b82f6';
-                    const isPending = (link as any).status === 'pending';
-
-                    ctx.save();
-                    ctx.strokeStyle = linkColor;
-                    if (isPending) ctx.setLineDash([5, 4]);
-                    // Primary level-1 links are clean and prominent; secondary level-2 lines are ultra-faint
-                    if (isL2) {
-                        ctx.lineWidth = (isHighlighted ? 1.8 : 0.8) / globalScale;
-                        ctx.globalAlpha = isHighlighted ? 0.85 : 0.18;
-                    } else {
-                        ctx.lineWidth = (isHighlighted ? 2.8 : 2.0) / globalScale;
-                        ctx.globalAlpha = isHighlighted ? 0.95 : 0.75;
-                    }
-
-                    ctx.beginPath();
-                    ctx.moveTo(start.x, start.y);
-                    ctx.lineTo(end.x, end.y);
-                    ctx.stroke();
-                    ctx.restore();
-                }}
-
-                // Particle and Label rendering
-                onRenderFramePost={(ctx: any, globalScale: number) => {
-                    // 1. Draw labels (on top of nodes)
-                    data.nodes.forEach((node: any) => {
-                        if (!showLevel2 && node.level === 2) return;
-                        const x = node.x ?? 0;
-                        const y = node.y ?? 0;
-                        const isHovered = hoveredNode && hoveredNode.id === node.id;
-
-                        // Check if we should show the combined tooltip
-                        const showCombinedTooltip = globalShowHoverTooltip && showGraphTooltip && isHovered;
-
-                        if (showCombinedTooltip) {
-                            // Update tooltip position via ref for performance
-                            if (tooltipRef.current && fgRef.current) {
-                                const coords = fgRef.current.graph2ScreenCoords(x, y);
-                                // Offset to be above the node
-                                const screenY = coords.y - (node.val * 1.5 * globalScale) - 10;
-                                tooltipRef.current.style.left = `${coords.x}px`;
-                                tooltipRef.current.style.top = `${screenY}px`;
-                                tooltipRef.current.style.transform = 'translate(-50%, -100%)';
-                            }
-
-                        } else if (node.level < 2 || globalScale > 1.2 || isHovered) {
-                            // Standard Label Drawing (Fallback)
-                            let labelOffsetMultiplier = 1.2;
-                            if (node.level === 0) labelOffsetMultiplier = 1.5;
-                            else if (node.level === 1) labelOffsetMultiplier = 1.4;
-                            else labelOffsetMultiplier = 1.2;
-
-                            let fontSize = 12 / globalScale;
-                            if (node.level === 0) fontSize = 16 / globalScale;
-                            else if (node.level === 1) fontSize = settings.level1FontSize / globalScale;
-                            else fontSize = settings.level2FontSize / globalScale;
-                            const labelPadding = 4 / globalScale;
-
-                            let labelX = x;
-                            let labelY = y;
-
-                            if (node.level === 0) {
-                                labelY = y + node.val * labelOffsetMultiplier + fontSize;
-                            } else {
-                                const angle = Math.atan2(y, x);
-                                const distance = node.val * labelOffsetMultiplier + fontSize;
-                                labelX = x + Math.cos(angle) * distance;
-                                labelY = y + Math.sin(angle) * distance;
-                            }
-
-                            ctx.font = `${node.level === 0 ? 'bold ' : ''}${fontSize}px "Inter", -apple-system, sans-serif`;
-                            const label = node.name;
-                            const textMetrics = ctx.measureText(label);
-                            const textWidth = textMetrics.width;
-                            const textHeight = fontSize * 1.2;
-
-                            ctx.fillStyle = 'rgba(0, 0, 0, 1)';
-                            ctx.fillRect(
-                                labelX - textWidth / 2 - labelPadding,
-                                labelY - textHeight / 2 - labelPadding,
-                                textWidth + labelPadding * 2,
-                                textHeight + labelPadding * 2
-                            );
-
-                            ctx.strokeStyle = node.level === 0 ? '#3b82f6' : 'rgba(255, 255, 255, 0.3)';
-                            ctx.lineWidth = 1 / globalScale;
-                            ctx.strokeRect(
-                                labelX - textWidth / 2 - labelPadding,
-                                labelY - textHeight / 2 - labelPadding,
-                                textWidth + labelPadding * 2,
-                                textHeight + labelPadding * 2
-                            );
-
-                            ctx.textAlign = 'center';
-                            ctx.textBaseline = 'middle';
-                            ctx.fillStyle = '#ffffff';
-                            ctx.fillText(label, labelX, labelY);
-                        }
-                    });
-
-                    // 2. Draw particles
-                    particles.forEach(p => {
-                        ctx.fillStyle = p.color;
-                        ctx.globalAlpha = p.opacity;
-                        ctx.beginPath();
-                        ctx.arc(p.x, p.y, p.size / globalScale, 0, 2 * Math.PI);
-                        ctx.fill();
-
-                        // Update particle position
-                        p.x += p.vx;
-                        p.y += p.vy;
-
-                        // Wrap around expanded bounds (3x viewport)
-                        const boundX = dimensions.width * 1.5;
-                        const boundY = dimensions.height * 1.5;
-                        if (p.x > boundX) p.x = -boundX;
-                        if (p.x < -boundX) p.x = boundX;
-                        if (p.y > boundY) p.y = -boundY;
-                        if (p.y < -boundY) p.y = boundY;
-                    });
-                    ctx.globalAlpha = 1;
-                }}
-            />
-            {/* HTML Overlay Tooltip */}
-            {globalShowHoverTooltip && showGraphTooltip && hoveredNode && (
-                <div ref={tooltipRef} className="absolute pointer-events-none z-50" style={{ left: 0, top: 0 }}>
-                    <WordTooltip
-                        word={(hoveredNode as any).name}
-                        phonetic={(hoveredNode as any).phonetic}
-                        translation={(hoveredNode as any).translation}
+            <div ref={containerRef} className="relative min-h-0 flex-1">
+                {/* Graph */}
+                {size.width > 0 && view && view.nodes.length > 1 && (
+                    <ForceGraph2D
+                        ref={fgRef}
+                        width={size.width}
+                        height={size.height}
+                        graphData={graphData}
+                        backgroundColor={palette.bg}
+                        nodeId="id"
+                        nodeLabel={() => ''}
+                        nodeRelSize={1}
+                        nodeVal={(n: AtlasNode) => (n.level === 0 ? RADIUS.center ** 2 : n.level === 1 ? RADIUS.l1 ** 2 : RADIUS.l2 ** 2)}
+                        nodeCanvasObject={paintNode}
+                        nodePointerAreaPaint={(n: AtlasNode, color: string, ctx: CanvasRenderingContext2D) => {
+                            ctx.fillStyle = color;
+                            ctx.beginPath();
+                            ctx.arc(n.x ?? 0, n.y ?? 0, (n.level === 0 ? RADIUS.center : n.level === 1 ? RADIUS.l1 : RADIUS.l2) + 5, 0, Math.PI * 2);
+                            ctx.fill();
+                        }}
+                        linkCanvasObject={paintLink}
+                        onRenderFramePre={drawFamilyBubble}
+                        onRenderFramePost={(ctx: CanvasRenderingContext2D, scale: number) => { paintLabels(ctx, scale); placeOverlays(); }}
+                        onEngineTick={applyForces}
+                        d3AlphaDecay={0.035}
+                        d3VelocityDecay={0.38}
+                        warmupTicks={40}
+                        cooldownTicks={160}
+                        onEngineStop={() => { if (!fittedRef.current) { fittedRef.current = true; fit(400); } }}
+                        onZoom={({ k }: { k: number }) => {
+                            if (zoomFrame.current !== null) return;
+                            zoomFrame.current = requestAnimationFrame(() => { zoomFrame.current = null; setZoomK(k); });
+                        }}
+                        onNodeHover={(n: AtlasNode | null) => {
+                            setHovered(n);
+                            if (containerRef.current) containerRef.current.style.cursor = n ? 'pointer' : 'default';
+                        }}
+                        onNodeClick={(n: AtlasNode) => { if (n.level !== 0) onNodeClick?.(n.id); }}
+                        onNodeDragEnd={(n: AtlasNode) => { if (n.level !== 0) { n.fx = n.x; n.fy = n.y; } }}
                     />
+                )}
+
+                {/* Group pills ("Synonyms 10/13 · show all") */}
+                {view && groupsPresent.filter((g) => !hidden.has(g)).map((g) => {
+                    const total = totals![g];
+                    const shown = Math.min(total, expanded.has(g) ? total : GROUP_CAP);
+                    const canToggle = total > GROUP_CAP;
+                    const label = expanded.has(g) ? t('atlas.showFewer', { group: groupLabel(g) }) : t('atlas.showAll', { total, group: groupLabel(g) });
+                    return (
+                        <div
+                            key={g}
+                            ref={(el) => { if (el) pillRefs.current.set(g, el); else pillRefs.current.delete(g); }}
+                            className="pointer-events-auto absolute left-0 top-0 z-10"
+                            style={{ visibility: 'hidden' }}
+                        >
+                            <button
+                                type="button"
+                                disabled={!canToggle}
+                                title={canToggle ? label : undefined}
+                                aria-label={canToggle ? label : undefined}
+                                onClick={() => setExpanded((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(g)) next.delete(g); else next.add(g);
+                                    return next;
+                                })}
+                                className="whitespace-nowrap rounded-full border bg-neutral-950/90 px-2.5 py-0.5 text-[11px] font-semibold shadow-sm disabled:cursor-default enabled:hover:bg-neutral-900"
+                                style={{ borderColor: GROUP_COLORS[g], color: GROUP_COLORS[g] }}
+                            >
+                                {groupLabel(g)} {g === 'family' ? `· ${shown}` : `${shown}/${total}`}
+                                {canToggle && <span className="ml-1 font-normal">{expanded.has(g) ? '−' : '+'}</span>}
+                            </button>
+                        </div>
+                    );
+                })}
+
+                {/* States */}
+                {loading && <div className="absolute inset-0 z-10 flex items-center justify-center text-sm text-neutral-500">{t('loadingGraph')}</div>}
+                {!loading && view && view.nodes.length <= 1 && (
+                    <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-neutral-500">{t('atlas.empty')}</div>
+                )}
+
+                {/* Familiarity legend (needs room next to the zoom bar) */}
+                {size.width >= 640 && (
+                <div className="absolute bottom-3 left-3 z-10 flex items-center gap-2.5 rounded-md border border-neutral-800 bg-neutral-950/85 px-2.5 py-1.5 text-[10px] text-neutral-400 backdrop-blur">
+                    <span className="font-semibold text-neutral-300">{t('atlas.legend.title')}</span>
+                    {FAMILIARITY_ORDER.map((f) => (
+                        <span key={f} className="inline-flex items-center gap-1">
+                            <span className="h-2.5 w-2.5 rounded-full border border-neutral-600" style={{ background: palette.fills[f] }} />
+                            {t(`atlas.legend.${f}`)}
+                        </span>
+                    ))}
+                    <span className="inline-flex items-center gap-1">
+                        <span className="h-2.5 w-2.5 rounded-full border border-dashed border-neutral-500" />
+                        {t('atlas.legend.unbuilt')}
+                    </span>
                 </div>
-            )}
+                )}
+
+                {/* Zoom bar */}
+                <div className="absolute bottom-3 right-3 z-10 flex items-center gap-1 rounded-md border border-neutral-800 bg-neutral-950/85 px-1.5 py-1 text-neutral-400 backdrop-blur">
+                    <button type="button" onClick={() => setZoom(zoomK / 1.25)} title={t('zoomOut')} aria-label={t('zoomOut')} className="rounded p-1 hover:bg-neutral-800 hover:text-white"><Minus size={14} /></button>
+                    <input
+                        type="range"
+                        min={25}
+                        max={400}
+                        step={5}
+                        value={Math.round(zoomK * 100)}
+                        onChange={(e) => setZoom(Number(e.target.value) / 100)}
+                        aria-label={t('atlas.zoom')}
+                        className="hidden h-1 w-20 cursor-pointer accent-emerald-500 md:block"
+                    />
+                    <button type="button" onClick={() => setZoom(zoomK * 1.25)} title={t('zoomIn')} aria-label={t('zoomIn')} className="rounded p-1 hover:bg-neutral-800 hover:text-white"><Plus size={14} /></button>
+                    <span className="w-9 text-center text-[10px] tabular-nums">{Math.round(zoomK * 100)}%</span>
+                    <button type="button" onClick={() => fit()} title={t('atlas.fit')} aria-label={t('atlas.fit')} className="rounded p-1 hover:bg-neutral-800 hover:text-white"><Maximize size={14} /></button>
+                    <button type="button" onClick={relayout} title={t('atlas.relayout')} aria-label={t('atlas.relayout')} className="rounded p-1 hover:bg-neutral-800 hover:text-white"><RotateCcw size={14} /></button>
+                </div>
+
+                {/* Hover tooltip */}
+                {showHoverTooltip && showGraphTooltip && hovered && (
+                    <div ref={tooltipRef} className="pointer-events-none absolute left-0 top-0 z-30">
+                        <WordTooltip word={hovered.name} phonetic={hovered.phonetic} translation={hovered.translation} />
+                    </div>
+                )}
+            </div>
         </div>
     );
 }

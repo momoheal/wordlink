@@ -493,6 +493,34 @@
       "derivative": "派生",
       "inflection": "词形",
       "spelling_similar": "形近"
+    },
+    "atlas": {
+      "eyebrow": "词汇星图",
+      "stats": "显示 {shown} / {total} 个词",
+      "groups": {
+        "family": "同族词",
+        "synonym": "同义词",
+        "near_synonym": "近义词",
+        "antonym": "反义词",
+        "spelling_similar": "形近词"
+      },
+      "showAll": "展开全部 {total} 个{group}",
+      "showFewer": "收起{group}",
+      "secondDegree": "二度关联",
+      "secondDegreeHint": "同时显示邻居词的关联词（H）",
+      "relayout": "重新布局",
+      "fit": "适应窗口",
+      "zoom": "缩放",
+      "legend": {
+        "title": "熟悉度",
+        "new": "未学",
+        "seen": "见过",
+        "weak": "薄弱",
+        "learning": "学习中",
+        "mastered": "已掌握",
+        "unbuilt": "待建词条"
+      },
+      "empty": "这个词暂时还没有关联词。"
     }
   },
   "notes": {
