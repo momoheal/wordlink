@@ -48,6 +48,21 @@ const GROUP_PRIORITY: RelationGroup[] = ['family', 'antonym', 'synonym', 'near_s
 
 const RADIUS = { center: 17, l1: 10, l2: 4.5 };
 
+// Word-to-word transitions: new words grow in, departing words fade out, the camera glides.
+const FADE_IN_MS = 480;
+const FADE_OUT_MS = 420;
+/** How long words take to travel to their new slot before physics takes over. */
+const MORPH_MS = 750;
+const CAMERA_MS = 900;
+/** Screen space kept around the predicted layout for labels and group pills. */
+const FRAME_PADDING = 60;
+
+// With the OS "reduce motion" setting on, transitions jump straight to their end state.
+const reducedMotionQuery = typeof window !== 'undefined' ? window.matchMedia?.('(prefers-reduced-motion: reduce)') : undefined;
+const reducedMotion = () => reducedMotionQuery?.matches ?? false;
+
+interface Point { x: number; y: number }
+
 interface AtlasNode extends GraphNode {
     group: RelationGroup | null;
     parentId?: string;
@@ -57,6 +72,8 @@ interface AtlasNode extends GraphNode {
     ay: number;
     /** Distance from the centre the layout keeps this word at. */
     ring?: number;
+    /** When the word was first drawn (ms); 0 = it was already on screen in the previous graph. */
+    born?: number;
     x?: number;
     y?: number;
     fx?: number;
@@ -76,13 +93,30 @@ interface Atlas {
     nodes: AtlasNode[];
     links: AtlasLink[];
     totals: Record<RelationGroup, number>;
+    /** Where the centre word sits. Graphs are built around the clicked word's current position so the view never jumps. */
+    origin: Point;
+}
+
+/** The outgoing graph at the moment the next one arrives: positions to start from and shapes to fade out. */
+interface Snapshot {
+    positions: Map<string, Point>;
+    origin: Point;
+    nodes: Array<Pick<AtlasNode, 'id' | 'name' | 'level' | 'group' | 'placeholder'> & Point>;
+    links: Array<{ key: string; from: Point; to: Point; group: RelationGroup; level: 1 | 2; pending: boolean }>;
+    at: number;
 }
 
 const endpointId = (end: string | { id: string }) => (typeof end === 'object' ? end.id : end);
 
-function buildAtlas(data: GraphData): Atlas | null {
+function buildAtlas(data: GraphData, from: Snapshot | null): Atlas | null {
     const center = data.nodes.find((n) => n.level === 0);
     if (!center) return null;
+    const origin = from?.positions.get(center.id) ?? from?.origin ?? { x: 0, y: 0 };
+    // Words that were already on screen keep their position and skip the fade-in.
+    const carried = (id: string): Partial<AtlasNode> => {
+        const p = from?.positions.get(id);
+        return p ? { x: p.x, y: p.y, born: 0 } : {};
+    };
 
     const l1Group = new Map<string, RelationGroup>();
     const l2Parent = new Map<string, string>();
@@ -100,14 +134,17 @@ function buildAtlas(data: GraphData): Atlas | null {
 
     const byId = new Map(data.nodes.map((n) => [n.id, n]));
     const totals = Object.fromEntries(RELATION_GROUPS.map((g) => [g, 0])) as Record<RelationGroup, number>;
-    const nodes: AtlasNode[] = [{ ...center, group: null, rank: 0, ax: 0, ay: 0, fx: 0, fy: 0 }];
+    const nodes: AtlasNode[] = [{
+        ...center, group: null, rank: 0, ax: origin.x, ay: origin.y, ...carried(center.id),
+        x: origin.x, y: origin.y, fx: origin.x, fy: origin.y,
+    }];
 
     // Entries that exist in the dictionary first, then alphabetical.
     const l1 = [...l1Group.entries()]
         .filter(([id]) => byId.has(id))
         .sort(([a], [b]) => Number(!!byId.get(a)!.placeholder) - Number(!!byId.get(b)!.placeholder) || a.localeCompare(b));
     for (const [id, group] of l1) {
-        nodes.push({ ...byId.get(id)!, level: 1, group, rank: totals[group]++, ax: 0, ay: 0 });
+        nodes.push({ ...byId.get(id)!, level: 1, group, rank: totals[group]++, ax: 0, ay: 0, ...carried(id) });
     }
 
     const perParent = new Map<string, number>();
@@ -116,7 +153,7 @@ function buildAtlas(data: GraphData): Atlas | null {
         if (!node || l1Group.has(id) || !l1Group.has(parentId)) continue;
         const rank = perParent.get(parentId) ?? 0;
         perParent.set(parentId, rank + 1);
-        nodes.push({ ...node, level: 2, group: l1Group.get(parentId)!, parentId, rank, ax: 0, ay: 0 });
+        nodes.push({ ...node, level: 2, group: l1Group.get(parentId)!, parentId, rank, ax: 0, ay: 0, ...carried(id) });
     }
 
     const known = new Set(nodes.map((n) => n.id));
@@ -138,7 +175,7 @@ function buildAtlas(data: GraphData): Atlas | null {
             pending: link.status === 'pending',
         });
     }
-    return { centerId: center.id, nodes, links, totals };
+    return { centerId: center.id, nodes, links, totals, origin };
 }
 
 interface Visibility {
@@ -156,12 +193,13 @@ function visibleGraph(atlas: Atlas, vis: Visibility) {
         ? atlas.nodes.filter((n) => n.level === 2 && n.parentId && l1Ids.has(n.parentId) && n.rank < L2_PER_PARENT)
         : [];
 
+    const { x: ox, y: oy } = atlas.origin;
     const family = l1.filter((n) => n.group === 'family');
     const familyRadius = family.length ? Math.max(72, 8 * family.length + 44) : 0;
     family.forEach((n, i) => {
         const a = (i / family.length) * Math.PI * 2 - Math.PI / 2;
-        n.ax = Math.cos(a) * familyRadius;
-        n.ay = Math.sin(a) * familyRadius;
+        n.ax = ox + Math.cos(a) * familyRadius;
+        n.ay = oy + Math.sin(a) * familyRadius;
     });
 
     // Each relation group owns a sector; its words fan out on an arc (two staggered rows) so a
@@ -173,26 +211,33 @@ function visibleGraph(atlas: Atlas, vis: Visibility) {
     const anchors = new Map<RelationGroup, { x: number; y: number }>();
     sectors.forEach((g, i) => {
         const center = i * span - Math.PI / 3;
-        anchors.set(g, { x: Math.cos(center) * sectorRadius, y: Math.sin(center) * sectorRadius });
+        anchors.set(g, { x: ox + Math.cos(center) * sectorRadius, y: oy + Math.sin(center) * sectorRadius });
         const members = l1.filter((n) => n.group === g);
         const step = Math.min(span * 0.8 / Math.max(1, members.length), 0.3);
         members.forEach((n, k) => {
             const a = center + (k - (members.length - 1) / 2) * step;
             const r = sectorRadius + (k % 2) * 44;
-            n.ax = Math.cos(a) * r;
-            n.ay = Math.sin(a) * r;
+            n.ax = ox + Math.cos(a) * r;
+            n.ay = oy + Math.sin(a) * r;
         });
     });
     const l1ById = new Map(l1.map((n) => [n.id, n]));
     for (const n of l2) {
         const parent = l1ById.get(n.parentId!)!;
-        const a = Math.atan2(parent.ay, parent.ax) + (n.rank - (L2_PER_PARENT - 1) / 2) * 0.12;
-        const r = Math.hypot(parent.ax, parent.ay) + 70;
-        n.ax = Math.cos(a) * r;
-        n.ay = Math.sin(a) * r;
+        const a = Math.atan2(parent.ay - oy, parent.ax - ox) + (n.rank - (L2_PER_PARENT - 1) / 2) * 0.12;
+        const r = Math.hypot(parent.ax - ox, parent.ay - oy) + 70;
+        n.ax = ox + Math.cos(a) * r;
+        n.ay = oy + Math.sin(a) * r;
     }
 
-    for (const n of [...l1, ...l2]) n.ring = Math.hypot(n.ax, n.ay);
+    for (const n of [...l1, ...l2]) {
+        n.ring = Math.hypot(n.ax - ox, n.ay - oy);
+        // Words appearing for the first time start close to the centre and fan out to their slot.
+        if (n.x === undefined) {
+            n.x = ox + (n.ax - ox) * 0.18;
+            n.y = oy + (n.ay - oy) * 0.18;
+        }
+    }
 
     const nodes = [atlas.nodes[0], ...l1, ...l2];
     const ids = new Set(nodes.map((n) => n.id));
@@ -202,7 +247,80 @@ function visibleGraph(atlas: Atlas, vis: Visibility) {
         // Family membership is shown by the bubble, not by edges.
         return !(l.level === 1 && l.group === 'family');
     });
-    return { nodes, links, family, sectors, familyRadius, sectorRadius, anchors };
+    return { nodes, links, family, sectors, familyRadius, sectorRadius, anchors, origin: atlas.origin };
+}
+type View = ReturnType<typeof visibleGraph>;
+
+/** Where everything on screen is right now, taken just before the next graph replaces it. */
+function snapshotOf(view: View | null): Snapshot | null {
+    if (!view) return null;
+    const positions = new Map<string, Point>();
+    const nodes: Snapshot['nodes'] = [];
+    for (const n of view.nodes) {
+        if (n.x === undefined || n.y === undefined) continue;
+        positions.set(n.id, { x: n.x, y: n.y });
+        nodes.push({ id: n.id, name: n.name, level: n.level, group: n.group, placeholder: n.placeholder, x: n.x, y: n.y });
+    }
+    const links: Snapshot['links'] = [];
+    for (const l of view.links) {
+        const s = l.source as AtlasNode, t = l.target as AtlasNode;
+        if (typeof s !== 'object' || typeof t !== 'object' || s.x === undefined || t.x === undefined) continue;
+        links.push({ key: `${s.id}|${t.id}`, from: { x: s.x, y: s.y! }, to: { x: t.x, y: t.y! }, group: l.group, level: l.level, pending: l.pending });
+    }
+    return { positions, origin: view.origin, nodes, links, at: performance.now() };
+}
+
+const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
+const easeOutCubic = (t: number) => 1 - (1 - clamp01(t)) ** 3;
+const easeInOutCubic = (t: number) => {
+    const x = clamp01(t);
+    return x < 0.5 ? 4 * x ** 3 : 1 - (-2 * x + 2) ** 3 / 2;
+};
+
+interface Morph { start: number; items: Array<{ n: AtlasNode; x0: number; y0: number }> }
+
+/** Pins every word where it is and plans its trip to its slot (its anchor). */
+function startMorph(nodes: AtlasNode[], now: number): Morph | null {
+    const items: Morph['items'] = [];
+    for (const n of nodes) {
+        if (n.level === 0 || n.x === undefined || n.y === undefined) continue;
+        if (Math.hypot(n.ax - n.x, n.ay - n.y) < 1) continue;
+        n.fx = n.x;
+        n.fy = n.y;
+        items.push({ n, x0: n.x, y0: n.y });
+    }
+    return items.length ? { start: now, items } : null;
+}
+
+/** Puts every word straight into its slot (no travel). */
+function snapToAnchors(nodes: AtlasNode[]) {
+    for (const n of nodes) {
+        if (n.level === 0) continue;
+        n.x = n.ax;
+        n.y = n.ay;
+    }
+}
+
+/** Moves the pinned words along their trip; returns false once they have arrived and are released. */
+function stepMorph(morph: Morph, now: number): boolean {
+    const p = easeInOutCubic((now - morph.start) / MORPH_MS);
+    for (const { n, x0, y0 } of morph.items) {
+        n.fx = n.x = x0 + (n.ax - x0) * p;
+        n.fy = n.y = y0 + (n.ay - y0) * p;
+    }
+    if (p < 1) return true;
+    for (const { n } of morph.items) {
+        n.fx = undefined;
+        n.fy = undefined;
+    }
+    return false;
+}
+
+/** 0 → 1 as a word grows in; stamps the word on the first frame it is drawn. */
+function appearance(n: AtlasNode, now: number): number {
+    if (reducedMotion()) return 1;
+    if (n.born === undefined) n.born = now;
+    return n.born === 0 ? 1 : easeOutCubic((now - n.born) / FADE_IN_MS);
 }
 
 /** Unpins dragged words and drops every word next to its anchor so the layout can settle again. */
@@ -326,6 +444,28 @@ function RingIcon({ level, palette }: { level: Familiarity | 'new'; palette: Pal
     );
 }
 
+/** Graph responses by word, shared by every panel. Hovering a word warms its entry, so a click can animate at once. */
+const graphCache = new Map<string, Promise<GraphData>>();
+const GRAPH_CACHE_SIZE = 40;
+
+function loadGraph(word: string): Promise<GraphData> {
+    const key = word.toLowerCase();
+    let pending = graphCache.get(key);
+    if (!pending) {
+        pending = fetch(`/api/fission?word=${encodeURIComponent(word)}`).then((res) => {
+            if (!res.ok) throw new Error(`fission ${res.status}`);
+            return res.json() as Promise<GraphData>;
+        });
+        pending.catch(() => graphCache.delete(key));
+        graphCache.set(key, pending);
+        if (graphCache.size > GRAPH_CACHE_SIZE) {
+            const oldest = graphCache.keys().next().value;
+            if (oldest !== undefined) graphCache.delete(oldest);
+        }
+    }
+    return pending;
+}
+
 /** "vt. 放弃, 抛弃, 遗弃" -> "放弃, 抛弃" */
 function shortGloss(translation?: string): string {
     if (!translation) return '';
@@ -340,9 +480,9 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
     const { theme } = useTheme();
     const palette = PALETTE[theme];
 
-    // Fetched state remembers what it was fetched for, so a new word never shows stale results
-    // and nothing has to be reset from inside an effect.
-    const [fetched, setFetched] = useState<{ word: string; graph: GraphData } | null>(null);
+    // The last graph that arrived stays on screen while the next word loads; `from` is the outgoing
+    // graph it morphs out of.
+    const [fetched, setFetched] = useState<{ word: string; graph: GraphData; from: Snapshot | null } | null>(null);
     const [known, setKnown] = useState<{ graph: GraphData; states: Record<string, Familiarity> } | null>(null);
     const [expandedByWord, setExpandedByWord] = useState<Record<string, RelationGroup[]>>({});
     const [hidden, setHidden] = useState<Set<RelationGroup>>(new Set());
@@ -350,29 +490,33 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
     const [hovered, setHovered] = useState<AtlasNode | null>(null);
     const [size, setSize] = useState({ width: 0, height: 0 });
     const [zoomK, setZoomK] = useState(1);
+    /** The word just clicked in the graph, pulsing while its neighbourhood loads. */
+    const [pending, setPending] = useState<{ word: string; x: number; y: number } | null>(null);
 
     const containerRef = useRef<HTMLDivElement | null>(null);
     const resizeObserver = useRef<ResizeObserver | null>(null);
     const fgRef = useRef<ForceGraphMethods<NodeObject<AtlasNode>, LinkObject<AtlasNode, AtlasLink>> | undefined>(undefined);
     const tooltipRef = useRef<HTMLDivElement>(null);
     const pillRefs = useRef(new Map<RelationGroup, HTMLDivElement>());
-    const fittedRef = useRef(false);
     const zoomFrame = useRef<number | null>(null);
+    const zoomLatest = useRef(1);
+    const viewRef = useRef<View | null>(null);
+    const morphRef = useRef<Morph | null>(null);
 
-    const data = word && fetched?.word === word ? fetched.graph : null;
-    const loading = !!word && !data;
+    const data = fetched?.graph ?? null;
+    const shownWord = fetched?.word ?? null;
+    const loading = !!word && fetched?.word !== word;
     const familiarity = useMemo(() => (known && known.graph === data ? known.states : {}), [known, data]);
-    const expanded = useMemo(() => new Set(word ? expandedByWord[word] ?? [] : []), [expandedByWord, word]);
+    const expanded = useMemo(() => new Set(shownWord ? expandedByWord[shownWord] ?? [] : []), [expandedByWord, shownWord]);
 
     // ---- data -------------------------------------------------------------
     useEffect(() => {
         if (!word) return;
-        const controller = new AbortController();
-        fetch(`/api/fission?word=${encodeURIComponent(word)}`, { signal: controller.signal })
-            .then((res) => res.json() as Promise<GraphData>)
-            .then((graph) => setFetched({ word, graph }))
-            .catch((err) => { if (err?.name !== 'AbortError') setFetched({ word, graph: { nodes: [], links: [] } }); });
-        return () => controller.abort();
+        let live = true;
+        loadGraph(word)
+            .then((graph) => { if (live) setFetched({ word, graph, from: snapshotOf(viewRef.current) }); })
+            .catch(() => { if (live) setFetched({ word, graph: { nodes: [], links: [] }, from: null }); });
+        return () => { live = false; };
     }, [word]);
 
     useEffect(() => {
@@ -391,12 +535,26 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
         return () => controller.abort();
     }, [data]);
 
-    const atlas = useMemo(() => (data ? buildAtlas(data) : null), [data]);
+    const atlas = useMemo(() => (fetched ? buildAtlas(fetched.graph, fetched.from) : null), [fetched]);
     const view = useMemo(
         () => (atlas ? visibleGraph(atlas, { hidden, expanded, secondDegree }) : null),
         [atlas, hidden, expanded, secondDegree],
     );
     const graphData = useMemo(() => (view ? { nodes: view.nodes, links: view.links } : { nodes: [], links: [] }), [view]);
+    useEffect(() => { viewRef.current = view; }, [view]);
+
+    // Parts of the previous graph that the new one does not reuse; they fade out where they were.
+    const ghosts = useMemo(() => {
+        const from = fetched?.from;
+        if (!from || !view) return null;
+        const live = new Set(view.nodes.map((n) => n.id));
+        const liveLinks = new Set(view.links.map((l) => `${endpointId(l.source)}|${endpointId(l.target)}`));
+        return {
+            at: from.at,
+            nodes: from.nodes.filter((n) => !live.has(n.id)),
+            links: from.links.filter((l) => !liveLinks.has(l.key)),
+        };
+    }, [fetched, view]);
 
     const neighbours = useMemo(() => {
         const map = new Map<string, Set<string>>();
@@ -437,42 +595,84 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
     // The graph instance appears only after its chunk loads, so this also runs from onEngineTick;
     // appliedFor makes it a no-op once the current view is configured.
     const appliedFor = useRef<object | null>(null);
+
+    /** Glide to where the layout is heading (its anchors), not to where the nodes happen to be mid-move. */
+    const frameView = useCallback((target: View, ms: number) => {
+        const fg = fgRef.current;
+        if (!fg || !size.width || !size.height) return;
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const n of target.nodes) {
+            const r = n.level === 0 ? RADIUS.center : n.level === 1 ? RADIUS.l1 : RADIUS.l2;
+            minX = Math.min(minX, n.ax - r);
+            maxX = Math.max(maxX, n.ax + r);
+            minY = Math.min(minY, n.ay - r);
+            maxY = Math.max(maxY, n.ay + r + 14);
+        }
+        const k = Math.min(1.8, Math.max(0.35, Math.min(
+            (size.width - FRAME_PADDING * 2) / Math.max(1, maxX - minX),
+            (size.height - FRAME_PADDING * 2) / Math.max(1, maxY - minY),
+        )));
+        fg.centerAt((minX + maxX) / 2, (minY + maxY) / 2, ms);
+        fg.zoom(k, ms);
+    }, [size]);
+
     const applyForces = useCallback(() => {
         const fg = fgRef.current;
         if (!fg || !view || appliedFor.current === view) return;
+        // The very first graph is framed instantly; every later change glides.
+        const glide = appliedFor.current !== null;
         appliedFor.current = view;
-        fittedRef.current = false;
         fg.d3Force('center', null);
         fg.d3Force('charge')?.strength(-40).distanceMax(160);
         fg.d3Force('link')
-            ?.distance((l: AtlasLink) => (l.level === 1 ? Math.hypot((l.target as AtlasNode).ax, (l.target as AtlasNode).ay) : 42))
+            ?.distance((l: AtlasLink) => (l.level === 1 ? (l.target as AtlasNode).ring ?? 0 : 42))
             .strength((l: AtlasLink) => (l.level === 1 ? 0.02 : 0.35));
         fg.d3Force('x', forceX<AtlasNode>((n) => n.ax).strength((n) => (n.level === 0 ? 0 : 0.2)));
         fg.d3Force('y', forceY<AtlasNode>((n) => n.ay).strength((n) => (n.level === 0 ? 0 : 0.2)));
-        fg.d3Force('ring', forceRadial<AtlasNode>((n) => n.ring ?? 0, 0, 0).strength((n) => (n.level === 0 ? 0 : 0.18)));
+        fg.d3Force('ring', forceRadial<AtlasNode>((n) => n.ring ?? 0, view.origin.x, view.origin.y).strength((n) => (n.level === 0 ? 0 : 0.18)));
         fg.d3Force('collide', forceCollide<AtlasNode>((n) => {
             if (n.level === 0) return RADIUS.center + 14;
             if (n.level === 2) return RADIUS.l2 + 10;
             return RADIUS.l1 + Math.min(34, n.name.length * 3.2) + 6;
         }).strength(0.9).iterations(3));
+        // Words travel to their slots on a fixed, eased path; physics only polishes the result.
+        const still = reducedMotion();
+        if (still) snapToAnchors(view.nodes);
+        morphRef.current = still ? null : startMorph(view.nodes, performance.now());
         fg.d3ReheatSimulation();
-    }, [view]);
+        frameView(view, glide && !still ? CAMERA_MS : 0);
+    }, [view, frameView]);
     useEffect(() => { applyForces(); }, [applyForces]);
 
     const fit = useCallback((ms = 500) => fgRef.current?.zoomToFit(ms, 84), []);
 
+    /** Once the layout settles, refit only if something drifted outside the panel. */
+    const ensureFramed = useCallback(() => {
+        const fg = fgRef.current;
+        if (!fg || !view) return;
+        const box = fg.getGraphBbox();
+        if (!box) return;
+        const a = fg.graph2ScreenCoords(box.x[0], box.y[0]);
+        const b = fg.graph2ScreenCoords(box.x[1], box.y[1]);
+        const margin = FRAME_PADDING / 3;
+        if (a.x < margin || a.y < margin || b.x > size.width - margin || b.y > size.height - margin - 30) fit(600);
+    }, [view, size, fit]);
+
     // Panels are resizable: keep the graph framed when the available space changes.
     useEffect(() => {
-        if (!fittedRef.current) return;
-        const timer = window.setTimeout(() => fit(250), 150);
+        const current = viewRef.current;
+        if (!current) return;
+        const timer = window.setTimeout(() => frameView(current, 250), 150);
         return () => window.clearTimeout(timer);
-    }, [size, fit]);
+    }, [frameView]);
 
     const relayout = useCallback(() => {
-        scatterAroundAnchors(view?.nodes ?? []);
-        fittedRef.current = false;
+        if (!view) return;
+        scatterAroundAnchors(view.nodes);
+        morphRef.current = null;
         fgRef.current?.d3ReheatSimulation();
-    }, [view]);
+        frameView(view, 600);
+    }, [view, frameView]);
 
     const setZoom = (k: number) => fgRef.current?.zoom(Math.min(4, Math.max(0.25, k)), 250);
 
@@ -480,22 +680,24 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
     const placeOverlays = useCallback(() => {
         const fg = fgRef.current;
         if (!fg || !view) return;
+        const now = performance.now();
+        const { x: ox, y: oy } = view.origin;
         for (const [group, el] of pillRefs.current) {
             const members = view.nodes.filter((n) => n.level === 1 && n.group === group && n.x !== undefined);
             if (!members.length) { el.style.visibility = 'hidden'; continue; }
             // Graph point the pill hangs from, and the direction it extends in (away from its words).
             let x: number, y: number, ux: number, uy: number;
             if (group === 'family') {
-                const r = Math.max(...members.map((n) => Math.hypot(n.x!, n.y!))) + RADIUS.l1 + 14;
-                x = 0; y = -r; ux = 0; uy = -1;
+                const r = Math.max(...members.map((n) => Math.hypot(n.x! - ox, n.y! - oy))) + RADIUS.l1 + 14;
+                x = ox; y = oy - r; ux = 0; uy = -1;
             } else {
                 const anchor = view.anchors.get(group);
                 if (!anchor) { el.style.visibility = 'hidden'; continue; }
-                const d = Math.hypot(anchor.x, anchor.y) || 1;
-                ux = anchor.x / d; uy = anchor.y / d;
-                const reach = Math.max(...members.map((n) => n.x! * ux + n.y! * uy));
-                x = ux * (reach + 26);
-                y = uy * (reach + 26);
+                const d = Math.hypot(anchor.x - ox, anchor.y - oy) || 1;
+                ux = (anchor.x - ox) / d; uy = (anchor.y - oy) / d;
+                const reach = Math.max(...members.map((n) => (n.x! - ox) * ux + (n.y! - oy) * uy));
+                x = ox + ux * (reach + 26);
+                y = oy + uy * (reach + 26);
             }
             const p = fg.graph2ScreenCoords(x, y);
             const w = el.offsetWidth, h = el.offsetHeight;
@@ -506,6 +708,7 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
             left = Math.min(Math.max(left, 6), size.width - w - 6);
             top = Math.min(Math.max(top, 6), size.height - h - 52);
             el.style.visibility = 'visible';
+            el.style.opacity = String(Math.max(...members.map((n) => appearance(n, now))));
             el.style.transform = `translate(${left}px, ${top}px)`;
         }
         if (hovered && tooltipRef.current && hovered.x !== undefined) {
@@ -515,30 +718,66 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
     }, [view, hovered, size]);
 
     // ---- canvas painters -------------------------------------------------------
-    const drawFamilyBubble = useCallback((ctx: CanvasRenderingContext2D, scale: number) => {
+    /** Under the live graph: the previous graph fading out, then the word-family bubble. */
+    const paintUnderlay = useCallback((ctx: CanvasRenderingContext2D, scale: number) => {
+        const now = performance.now();
+        if (morphRef.current && !stepMorph(morphRef.current, now)) morphRef.current = null;
+        const fade = ghosts && !reducedMotion() ? 1 - easeOutCubic((now - ghosts.at) / FADE_OUT_MS) : 0;
+        if (ghosts && fade > 0) {
+            ctx.save();
+            for (const l of ghosts.links) {
+                ctx.globalAlpha = fade * palette.edgeAlpha * (l.level === 2 ? 0.55 : 1);
+                ctx.strokeStyle = GROUP_COLORS[l.group];
+                ctx.lineWidth = (l.level === 2 ? 0.8 : 1.3) / scale;
+                ctx.setLineDash(l.pending ? [5 / scale, 4 / scale] : []);
+                ctx.beginPath();
+                ctx.moveTo(l.from.x, l.from.y);
+                ctx.lineTo(l.to.x, l.to.y);
+                ctx.stroke();
+            }
+            ctx.setLineDash([]);
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.font = `${12 / scale}px Geist, "Noto Sans SC", system-ui, sans-serif`;
+            for (const n of ghosts.nodes) {
+                const r = (n.level === 0 ? RADIUS.center : n.level === 1 ? RADIUS.l1 : RADIUS.l2) * (0.6 + 0.4 * fade);
+                ctx.globalAlpha = fade;
+                paintJewel(ctx, n.x, n.y, r, n.level === 0 ? palette.center : jewelStops(GROUP_COLORS[n.group ?? 'synonym']), palette, false);
+                if (n.level < 2) {
+                    ctx.fillStyle = palette.muted;
+                    ctx.fillText(n.name, n.x, n.y + r + 3 / scale);
+                }
+            }
+            ctx.restore();
+        }
+
         if (!view?.family.length) return;
-        const r = Math.max(...view.family.map((n) => Math.hypot(n.x ?? n.ax, n.y ?? n.ay))) + RADIUS.l1 + 14;
+        const { x: ox, y: oy } = view.origin;
+        const r = Math.max(...view.family.map((n) => Math.hypot((n.x ?? n.ax) - ox, (n.y ?? n.ay) - oy))) + RADIUS.l1 + 14;
         ctx.save();
+        ctx.globalAlpha = Math.max(...view.family.map((n) => appearance(n, now)));
         ctx.beginPath();
-        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.arc(ox, oy, r, 0, Math.PI * 2);
         ctx.fillStyle = palette.bubbleFill;
         ctx.fill();
         ctx.setLineDash([6 / scale, 5 / scale]);
         ctx.lineWidth = 1.2 / scale;
         ctx.strokeStyle = GROUP_COLORS.family;
-        ctx.globalAlpha = 0.65;
+        ctx.globalAlpha *= 0.65;
         ctx.stroke();
         ctx.restore();
-    }, [view, palette]);
+    }, [view, ghosts, palette]);
 
     const paintLink = useCallback((link: AtlasLink, ctx: CanvasRenderingContext2D, scale: number) => {
         const s = link.source as AtlasNode, e = link.target as AtlasNode;
         if (s.x === undefined || e.x === undefined) return;
         const lit = hovered && (s.id === hovered.id || e.id === hovered.id);
         const dim = hovered && !lit;
+        const now = performance.now();
         ctx.save();
         ctx.strokeStyle = GROUP_COLORS[link.group];
-        ctx.globalAlpha = lit ? 0.95 : dim ? 0.12 : palette.edgeAlpha * (link.level === 2 ? 0.55 : 1);
+        ctx.globalAlpha = (lit ? 0.95 : dim ? 0.12 : palette.edgeAlpha * (link.level === 2 ? 0.55 : 1))
+            * Math.min(appearance(s, now), appearance(e, now));
         ctx.lineWidth = (lit ? 2 : link.level === 2 ? 0.8 : 1.3) / scale;
         if (link.pending) ctx.setLineDash([5 / scale, 4 / scale]);
         ctx.beginPath();
@@ -553,14 +792,17 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
         const isHovered = hovered?.id === node.id;
         const dim = hovered && !isHovered && !neighbours.get(hovered.id)?.has(node.id) && node.level !== 0;
         const level = familiarity[node.id];
+        // Newcomers grow from 60% to full size while fading in.
+        const shown = appearance(node, performance.now());
+        const grow = 0.6 + 0.4 * shown;
         ctx.save();
-        if (dim) ctx.globalAlpha = 0.35;
+        ctx.globalAlpha = (dim ? 0.35 : 1) * shown;
 
         if (node.level === 0) {
-            paintJewel(ctx, x, y, RADIUS.center, palette.center, palette, isHovered);
-            paintProgressRing(ctx, x, y, RADIUS.center + 1.5, level, palette, scale);
+            paintJewel(ctx, x, y, RADIUS.center * grow, palette.center, palette, isHovered);
+            paintProgressRing(ctx, x, y, RADIUS.center * grow + 1.5, level, palette, scale);
         } else if (node.level === 1) {
-            const r = RADIUS.l1 * (isHovered ? 1.2 : 1);
+            const r = RADIUS.l1 * (isHovered ? 1.2 : 1) * grow;
             if (node.placeholder) {
                 // No dictionary entry yet: keep it hollow and dashed.
                 ctx.beginPath();
@@ -577,7 +819,7 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
             }
         } else {
             ctx.beginPath();
-            ctx.arc(x, y, RADIUS.l2 * (isHovered ? 1.4 : 1), 0, Math.PI * 2);
+            ctx.arc(x, y, RADIUS.l2 * (isHovered ? 1.4 : 1) * grow, 0, Math.PI * 2);
             ctx.fillStyle = GROUP_COLORS[node.group!];
             ctx.globalAlpha *= node.placeholder ? 0.35 : 0.7;
             ctx.fill();
@@ -588,6 +830,7 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
     const paintLabels = useCallback((ctx: CanvasRenderingContext2D, scale: number) => {
         if (!view) return;
         const showGloss = scale >= 1.15;
+        const now = performance.now();
         ctx.save();
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
@@ -600,7 +843,7 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
             const r = node.level === 0 ? RADIUS.center + 7 : node.level === 1 ? RADIUS.l1 : RADIUS.l2;
             const px = node.level === 0 ? 14 : node.level === 1 ? 12 : 10;
             const dim = hovered && !near && node.level !== 0;
-            ctx.globalAlpha = dim ? 0.35 : 1;
+            ctx.globalAlpha = (dim ? 0.35 : 1) * appearance(node, now);
             ctx.font = `${node.level === 0 ? '600 ' : ''}${px / scale}px Geist, "Noto Sans SC", system-ui, sans-serif`;
             const y = node.y! + r + 3 / scale;
             ctx.strokeStyle = palette.halo;
@@ -641,7 +884,9 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
                     <div className="text-[9px] font-bold uppercase tracking-[0.24em] text-emerald-400">{t('atlas.eyebrow')}</div>
                     <div className="flex items-baseline gap-2">
                         <span className="truncate text-lg leading-tight text-white" style={{ fontFamily: "'Instrument Serif', serif" }}>{word}</span>
-                        {atlas && <span className="whitespace-nowrap text-[11px] text-neutral-500">{t('atlas.stats', { shown: shownWords, total: totalWords })}</span>}
+                        {loading
+                            ? <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" aria-label={t('loadingGraph')} />
+                            : atlas && <span className="whitespace-nowrap text-[11px] text-neutral-500">{t('atlas.stats', { shown: shownWords, total: totalWords })}</span>}
                     </div>
                 </div>
                 <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
@@ -680,7 +925,7 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
 
             <div ref={attachGraphArea} className="relative min-h-0 flex-1">
                 {/* Graph */}
-                {size.width > 0 && view && view.nodes.length > 1 && (
+                {size.width > 0 && view && (
                     <ForceGraph2D
                         ref={fgRef}
                         width={size.width}
@@ -699,23 +944,31 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
                             ctx.fill();
                         }}
                         linkCanvasObject={paintLink}
-                        onRenderFramePre={drawFamilyBubble}
+                        onRenderFramePre={paintUnderlay}
                         onRenderFramePost={(ctx: CanvasRenderingContext2D, scale: number) => { paintLabels(ctx, scale); placeOverlays(); }}
                         onEngineTick={applyForces}
                         d3AlphaDecay={0.035}
                         d3VelocityDecay={0.38}
-                        warmupTicks={40}
+                        warmupTicks={0}
                         cooldownTicks={160}
-                        onEngineStop={() => { if (!fittedRef.current) { fittedRef.current = true; fit(400); } }}
+                        onEngineStop={ensureFramed}
                         onZoom={({ k }: { k: number }) => {
+                            zoomLatest.current = k;
                             if (zoomFrame.current !== null) return;
-                            zoomFrame.current = requestAnimationFrame(() => { zoomFrame.current = null; setZoomK(k); });
+                            zoomFrame.current = requestAnimationFrame(() => { zoomFrame.current = null; setZoomK(zoomLatest.current); });
                         }}
                         onNodeHover={(n: AtlasNode | null) => {
                             setHovered(n);
+                            if (n && n.level !== 0) loadGraph(n.id).catch(() => undefined);
                             if (containerRef.current) containerRef.current.style.cursor = n ? 'pointer' : 'default';
                         }}
-                        onNodeClick={(n: AtlasNode) => { if (n.level !== 0) onNodeClick?.(n.id); }}
+                        onNodeClick={(n: AtlasNode) => {
+                            if (n.level === 0) return;
+                            const p = fgRef.current?.graph2ScreenCoords(n.x ?? 0, n.y ?? 0);
+                            if (p) setPending({ word: n.id, x: p.x, y: p.y });
+                            setHovered(null);
+                            onNodeClick?.(n.id);
+                        }}
                         onNodeDragEnd={(n: AtlasNode) => { if (n.level !== 0) { n.fx = n.x; n.fy = n.y; } }}
                     />
                 )}
@@ -739,8 +992,9 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
                                 title={canToggle ? label : undefined}
                                 aria-label={canToggle ? label : undefined}
                                 onClick={() => setExpandedByWord((prev) => {
-                                    const current = prev[word] ?? [];
-                                    return { ...prev, [word]: current.includes(g) ? current.filter((x) => x !== g) : [...current, g] };
+                                    if (!shownWord) return prev;
+                                    const current = prev[shownWord] ?? [];
+                                    return { ...prev, [shownWord]: current.includes(g) ? current.filter((x) => x !== g) : [...current, g] };
                                 })}
                                 className="whitespace-nowrap rounded-full border bg-neutral-950/90 px-2.5 py-0.5 text-[11px] font-semibold shadow-sm disabled:cursor-default enabled:hover:bg-neutral-900"
                                 style={{ borderColor: GROUP_COLORS[g], color: GROUP_COLORS[g] }}
@@ -753,7 +1007,13 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
                 })}
 
                 {/* States */}
-                {loading && <div className="absolute inset-0 z-10 flex items-center justify-center text-sm text-neutral-500">{t('loadingGraph')}</div>}
+                {loading && !view && <div className="absolute inset-0 z-10 flex items-center justify-center text-sm text-neutral-500">{t('loadingGraph')}</div>}
+                {loading && pending?.word === word && (
+                    <span
+                        className="pointer-events-none absolute z-10 h-10 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-emerald-400 motion-safe:animate-ping"
+                        style={{ left: pending.x, top: pending.y }}
+                    />
+                )}
                 {!loading && view && view.nodes.length <= 1 && (
                     <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-neutral-500">{t('atlas.empty')}</div>
                 )}
