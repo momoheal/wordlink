@@ -46,7 +46,7 @@ const L2_PER_PARENT = 3;
 /** When a word is linked to the centre in several ways, the first group in this list wins. */
 const GROUP_PRIORITY: RelationGroup[] = ['family', 'antonym', 'synonym', 'near_synonym', 'spelling_similar'];
 
-const RADIUS = { center: 15, l1: 8.5, l2: 4 };
+const RADIUS = { center: 17, l1: 10, l2: 4.5 };
 
 interface AtlasNode extends GraphNode {
     group: RelationGroup | null;
@@ -157,7 +157,7 @@ function visibleGraph(atlas: Atlas, vis: Visibility) {
         : [];
 
     const family = l1.filter((n) => n.group === 'family');
-    const familyRadius = family.length ? Math.max(58, 7 * family.length + 34) : 0;
+    const familyRadius = family.length ? Math.max(72, 8 * family.length + 44) : 0;
     family.forEach((n, i) => {
         const a = (i / family.length) * Math.PI * 2 - Math.PI / 2;
         n.ax = Math.cos(a) * familyRadius;
@@ -221,22 +221,110 @@ function scatterAroundAnchors(nodes: AtlasNode[]) {
 // ---------------------------------------------------------------------------
 
 const PALETTE: Record<Theme, {
-    bg: string; ink: string; muted: string; halo: string; centerRing: string; edgeAlpha: number;
-    bubbleFill: string; fills: Record<Familiarity | 'new', string>;
+    bg: string; ink: string; muted: string; halo: string; edgeAlpha: number; bubbleFill: string;
+    /** Progress ring around a node (familiarity); weak words get their own warning colour. */
+    ring: string; weakRing: string;
+    /** Centre word: highlight, body and rim of its gradient. */
+    center: [string, string, string];
+    /** Dark theme lets nodes glow; light theme gives them a soft drop shadow instead. */
+    glow: boolean;
 }> = {
     dark: {
-        bg: '#05070d', ink: '#eaf2ff', muted: '#8ca3c4', halo: 'rgba(5,7,13,0.92)', centerRing: '#38bdf8',
-        edgeAlpha: 0.5, bubbleFill: 'rgba(167,139,250,0.06)',
-        fills: { new: '#0e1525', seen: '#173252', weak: '#5a1f2b', learning: '#4a3711', mastered: '#124430' },
+        bg: '#05070d', ink: '#eaf2ff', muted: '#8ca3c4', halo: 'rgba(5,7,13,0.92)', edgeAlpha: 0.45,
+        bubbleFill: 'rgba(167,139,250,0.06)', ring: 'rgba(234,242,255,0.9)', weakRing: '#fb7185',
+        center: ['#e0f2fe', '#38bdf8', '#075985'], glow: true,
     },
     light: {
-        bg: '#f1ede4', ink: '#20302c', muted: '#61706b', halo: 'rgba(241,237,228,0.95)', centerRing: '#1b6c53',
-        edgeAlpha: 0.55, bubbleFill: 'rgba(139,92,246,0.05)',
-        fills: { new: '#fffdf8', seen: '#d7e9f5', weak: '#f5d7d4', learning: '#fbe7bf', mastered: '#d8eedb' },
+        bg: '#f1ede4', ink: '#20302c', muted: '#61706b', halo: 'rgba(241,237,228,0.95)', edgeAlpha: 0.5,
+        bubbleFill: 'rgba(139,92,246,0.05)', ring: 'rgba(32,48,44,0.85)', weakRing: '#e11d48',
+        center: ['#a7f3d0', '#1b6c53', '#0f3d2e'], glow: false,
     },
 };
+type Palette = (typeof PALETTE)[Theme];
 
 const FAMILIARITY_ORDER: Array<Familiarity | 'new'> = ['new', 'seen', 'weak', 'learning', 'mastered'];
+/** Share of the progress ring drawn for each familiarity level. */
+const RING_FRACTION: Record<Familiarity, number> = { seen: 0.25, weak: 1, learning: 0.66, mastered: 1 };
+
+/** Blend two #rrggbb colours; t = 0 gives `hex`, t = 1 gives `other`. */
+function mix(hex: string, other: string, t: number): string {
+    const a = parseInt(hex.slice(1), 16), b = parseInt(other.slice(1), 16);
+    const channel = (shift: number) => {
+        const from = (a >> shift) & 255, to = (b >> shift) & 255;
+        return Math.round(from + (to - from) * t);
+    };
+    return `rgb(${channel(16)}, ${channel(8)}, ${channel(0)})`;
+}
+
+/** Solid "jewel" node: a radial gradient in the relation colour, glowing on dark, shadowed on paper. */
+function paintJewel(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, stops: [string, string, string], palette: Palette, hovered: boolean) {
+    const [highlight, body, rim] = stops;
+    ctx.save();
+    if (palette.glow) {
+        ctx.shadowColor = body;
+        ctx.shadowBlur = hovered ? 22 : 12;
+    } else {
+        ctx.shadowColor = 'rgba(60, 45, 20, 0.28)';
+        ctx.shadowBlur = hovered ? 8 : 4;
+        ctx.shadowOffsetY = 1;
+    }
+    const gradient = ctx.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.1, x, y, r);
+    gradient.addColorStop(0, highlight);
+    gradient.addColorStop(0.55, body);
+    gradient.addColorStop(1, rim);
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = gradient;
+    ctx.fill();
+    ctx.restore();
+}
+
+/** Gradient stops for a relation colour. */
+function jewelStops(color: string): [string, string, string] {
+    return [mix(color, '#ffffff', 0.55), color, mix(color, '#000000', 0.3)];
+}
+
+/** Familiarity as a progress ring: a quarter once seen, two thirds while learning, closed when mastered. */
+function paintProgressRing(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, level: Familiarity | undefined, palette: Palette, scale: number) {
+    if (!level) return;
+    const radius = r + 3.5;
+    const color = level === 'weak' ? palette.weakRing : palette.ring;
+    const fraction = RING_FRACTION[level];
+    ctx.save();
+    ctx.lineWidth = (level === 'mastered' ? 2.4 : 2) / scale;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = color;
+    if (fraction < 1) {
+        ctx.globalAlpha *= 0.22;
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha /= 0.22;
+    }
+    ctx.beginPath();
+    ctx.arc(x, y, radius, -Math.PI / 2, -Math.PI / 2 + fraction * Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+}
+
+/** Legend swatch: a neutral dot with the same progress ring the graph draws. */
+function RingIcon({ level, palette }: { level: Familiarity | 'new'; palette: Palette }) {
+    const circumference = 2 * Math.PI * 6;
+    const fraction = level === 'new' ? 0 : RING_FRACTION[level];
+    const color = level === 'weak' ? palette.weakRing : palette.ring;
+    return (
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+            <circle cx="8" cy="8" r="3.2" fill={palette.muted} />
+            {fraction > 0 && fraction < 1 && <circle cx="8" cy="8" r="6" fill="none" stroke={color} strokeOpacity="0.22" strokeWidth="1.6" />}
+            {fraction > 0 && (
+                <circle
+                    cx="8" cy="8" r="6" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round"
+                    strokeDasharray={`${fraction * circumference} ${circumference}`} transform="rotate(-90 8 8)"
+                />
+            )}
+        </svg>
+    );
+}
 
 /** "vt. 放弃, 抛弃, 遗弃" -> "放弃, 抛弃" */
 function shortGloss(translation?: string): string {
@@ -371,7 +459,7 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
     }, [view]);
     useEffect(() => { applyForces(); }, [applyForces]);
 
-    const fit = useCallback((ms = 500) => fgRef.current?.zoomToFit(ms, 64), []);
+    const fit = useCallback((ms = 500) => fgRef.current?.zoomToFit(ms, 84), []);
 
     // Panels are resizable: keep the graph framed when the available space changes.
     useEffect(() => {
@@ -395,24 +483,30 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
         for (const [group, el] of pillRefs.current) {
             const members = view.nodes.filter((n) => n.level === 1 && n.group === group && n.x !== undefined);
             if (!members.length) { el.style.visibility = 'hidden'; continue; }
-            let x: number, y: number;
+            // Graph point the pill hangs from, and the direction it extends in (away from its words).
+            let x: number, y: number, ux: number, uy: number;
             if (group === 'family') {
-                const r = Math.max(...members.map((n) => Math.hypot(n.x!, n.y!))) + RADIUS.l1 + 16;
-                x = 0; y = -r;
+                const r = Math.max(...members.map((n) => Math.hypot(n.x!, n.y!))) + RADIUS.l1 + 14;
+                x = 0; y = -r; ux = 0; uy = -1;
             } else {
                 const anchor = view.anchors.get(group);
                 if (!anchor) { el.style.visibility = 'hidden'; continue; }
                 const d = Math.hypot(anchor.x, anchor.y) || 1;
-                const ux = anchor.x / d, uy = anchor.y / d;
+                ux = anchor.x / d; uy = anchor.y / d;
                 const reach = Math.max(...members.map((n) => n.x! * ux + n.y! * uy));
-                x = ux * (reach + 34);
-                y = uy * (reach + 34);
+                x = ux * (reach + 26);
+                y = uy * (reach + 26);
             }
             const p = fg.graph2ScreenCoords(x, y);
-            const px = Math.min(Math.max(p.x, 70), size.width - 70);
-            const py = Math.min(Math.max(p.y, 14), size.height - 50);
+            const w = el.offsetWidth, h = el.offsetHeight;
+            // Top-left corner of the pill so that it sits on the far side of the point.
+            let left = p.x - w / 2 + ux * w / 2;
+            // Words carry their label underneath, so leave room for it below the cluster.
+            let top = p.y - h / 2 + uy * h / 2 + (uy > 0 ? 16 : 0);
+            left = Math.min(Math.max(left, 6), size.width - w - 6);
+            top = Math.min(Math.max(top, 6), size.height - h - 52);
             el.style.visibility = 'visible';
-            el.style.transform = `translate(${px}px, ${py}px) translate(-50%, -50%)`;
+            el.style.transform = `translate(${left}px, ${top}px)`;
         }
         if (hovered && tooltipRef.current && hovered.x !== undefined) {
             const p = fg.graph2ScreenCoords(hovered.x, hovered.y ?? 0);
@@ -458,36 +552,29 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
         const x = node.x ?? 0, y = node.y ?? 0;
         const isHovered = hovered?.id === node.id;
         const dim = hovered && !isHovered && !neighbours.get(hovered.id)?.has(node.id) && node.level !== 0;
-        const fill = palette.fills[familiarity[node.id] ?? 'new'];
+        const level = familiarity[node.id];
         ctx.save();
         if (dim) ctx.globalAlpha = 0.35;
 
         if (node.level === 0) {
-            ctx.beginPath();
-            ctx.arc(x, y, RADIUS.center + 5, 0, Math.PI * 2);
-            ctx.strokeStyle = palette.centerRing;
-            ctx.lineWidth = 2.5 / scale;
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.arc(x, y, RADIUS.center, 0, Math.PI * 2);
-            ctx.fillStyle = fill;
-            ctx.fill();
-            ctx.lineWidth = 1.5 / scale;
-            ctx.stroke();
+            paintJewel(ctx, x, y, RADIUS.center, palette.center, palette, isHovered);
+            paintProgressRing(ctx, x, y, RADIUS.center + 1.5, level, palette, scale);
         } else if (node.level === 1) {
-            const color = GROUP_COLORS[node.group!];
-            ctx.beginPath();
-            ctx.arc(x, y, RADIUS.l1 * (isHovered ? 1.25 : 1), 0, Math.PI * 2);
+            const r = RADIUS.l1 * (isHovered ? 1.2 : 1);
             if (node.placeholder) {
+                // No dictionary entry yet: keep it hollow and dashed.
+                ctx.beginPath();
+                ctx.arc(x, y, r, 0, Math.PI * 2);
+                ctx.fillStyle = palette.bg;
+                ctx.fill();
                 ctx.setLineDash([3 / scale, 3 / scale]);
                 ctx.strokeStyle = palette.muted;
+                ctx.lineWidth = 1.5 / scale;
+                ctx.stroke();
             } else {
-                ctx.fillStyle = fill;
-                ctx.fill();
-                ctx.strokeStyle = color;
+                paintJewel(ctx, x, y, r, jewelStops(GROUP_COLORS[node.group!]), palette, isHovered);
+                paintProgressRing(ctx, x, y, r, level, palette, scale);
             }
-            ctx.lineWidth = 2 / scale;
-            ctx.stroke();
         } else {
             ctx.beginPath();
             ctx.arc(x, y, RADIUS.l2 * (isHovered ? 1.4 : 1), 0, Math.PI * 2);
@@ -677,7 +764,7 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
                     <span className="font-semibold text-neutral-300">{t('atlas.legend.title')}</span>
                     {FAMILIARITY_ORDER.map((f) => (
                         <span key={f} className="inline-flex items-center gap-1">
-                            <span className="h-2.5 w-2.5 rounded-full border border-neutral-600" style={{ background: palette.fills[f] }} />
+                            <RingIcon level={f} palette={palette} />
                             {t(`atlas.legend.${f}`)}
                         </span>
                     ))}

@@ -34,7 +34,7 @@
 - **颜色就是关系类型**：工具栏一键开关同义、近义、反义、形近。
 - **同族词画成气泡**：派生和词形变化（*reach → reached, reaching, reachable*）圈在中心词周围的虚线气泡里，不再多画一堆连线。
 - **每类关系一个扇区**：同类词朝同一方向展开，旁边标着「同义词 10/12 +」，点一下展开其余的词。
-- **学习进度上图**：节点按你对这个词的掌握程度着色——未学、见过、薄弱、学习中、已掌握。
+- **学习进度上图**：每个词外面有一圈进度环——见过是四分之一圈，学习中是三分之二圈，掌握后闭合成整圈，薄弱的词是红色整圈。
 - 按 <kbd>H</kbd> 显示二度关联；还没有词条的词用虚线圈；放大后词下方显示简短中文释义。
 
 <p align="center">
@@ -140,6 +140,6 @@ WordLink-Edge 是在 **Qwen2.5-1.5B-Instruct 上做 SFT + DPO** 得到的模型�
 
 - [ECDICT](https://github.com/skywind3000/ECDICT)：音标、中文释义、词形
 - [Qwen2.5](https://github.com/QwenLM/Qwen2.5)：基座模型
-- 图谱的关系筛选、同族气泡与熟悉度着色受 [HytidelLegend/ai-aug-edu](https://github.com/HytidelLegend/ai-aug-edu) 中「词汇星图」的启发
+- 图谱的关系筛选、同族气泡与熟悉度标记受 [HytidelLegend/ai-aug-edu](https://github.com/HytidelLegend/ai-aug-edu) 中「词汇星图」的启发
 
 为 [UNU Macau · AI for SDGs 2026](https://unu.edu/macau) AI for Education 赛道（SDG 4）而做。

@@ -37,8 +37,8 @@ The right-hand panel of the workspace is a map of the selected word.
   dashed bubble around the centre word instead of adding more lines.
 - **One sector per relation.** Each group fans out in its own direction with a label such as *Synonyms 10/12 +*;
   click it to show the rest.
-- **Your progress on the map.** Nodes are filled by how well you know each word: new, seen, weak, learning or
-  mastered.
+- **Your progress on the map.** A ring around each word shows how well you know it: a quarter once you have seen
+  it, two thirds while learning, closed when mastered, red when it is weak.
 - **Second-degree links on demand** (press <kbd>H</kbd>), dashed outlines for words without an entry yet, and
   short Chinese glosses when you zoom in.
 
@@ -174,7 +174,7 @@ own. Model weights follow the [Qwen2.5 license](https://huggingface.co/Qwen/Qwen
 
 - [ECDICT](https://github.com/skywind3000/ECDICT) for phonetics, translations and word forms
 - [Qwen2.5](https://github.com/QwenLM/Qwen2.5) as the base model
-- The graph's relation chips, word-family bubbles and familiarity colours were inspired by
+- The graph's relation chips, word-family bubbles and familiarity marks were inspired by
   词汇星图 in [HytidelLegend/ai-aug-edu](https://github.com/HytidelLegend/ai-aug-edu)
 
 Built for [UNU Macau · AI for SDGs 2026](https://unu.edu/macau), AI for Education (SDG 4).
