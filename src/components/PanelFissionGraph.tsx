@@ -164,29 +164,35 @@ function visibleGraph(atlas: Atlas, vis: Visibility) {
         n.ay = Math.sin(a) * familyRadius;
     });
 
+    // Each relation group owns a sector; its words fan out on an arc (two staggered rows) so a
+    // big group spreads sideways instead of piling up toward the centre.
     const sectors = RELATION_GROUPS.filter((g) => g !== 'family' && l1.some((n) => n.group === g));
-    const sectorRadius = familyRadius + 170;
+    const largest = Math.max(1, ...sectors.map((g) => l1.filter((n) => n.group === g).length));
+    const sectorRadius = familyRadius + 150 + 4 * largest;
+    const span = sectors.length ? (Math.PI * 2) / sectors.length : 0;
     const anchors = new Map<RelationGroup, { x: number; y: number }>();
     sectors.forEach((g, i) => {
-        const a = (i / sectors.length) * Math.PI * 2 - Math.PI / 3;
-        anchors.set(g, { x: Math.cos(a) * sectorRadius, y: Math.sin(a) * sectorRadius });
+        const center = i * span - Math.PI / 3;
+        anchors.set(g, { x: Math.cos(center) * sectorRadius, y: Math.sin(center) * sectorRadius });
+        const members = l1.filter((n) => n.group === g);
+        const step = Math.min(span * 0.8 / Math.max(1, members.length), 0.3);
+        members.forEach((n, k) => {
+            const a = center + (k - (members.length - 1) / 2) * step;
+            const r = sectorRadius + (k % 2) * 44;
+            n.ax = Math.cos(a) * r;
+            n.ay = Math.sin(a) * r;
+        });
     });
-    for (const n of l1) {
-        if (n.group === 'family') continue;
-        const anchor = anchors.get(n.group!)!;
-        n.ax = anchor.x;
-        n.ay = anchor.y;
-    }
     const l1ById = new Map(l1.map((n) => [n.id, n]));
     for (const n of l2) {
         const parent = l1ById.get(n.parentId!)!;
-        n.ax = parent.ax * 1.5;
-        n.ay = parent.ay * 1.5;
+        const a = Math.atan2(parent.ay, parent.ax) + (n.rank - (L2_PER_PARENT - 1) / 2) * 0.12;
+        const r = Math.hypot(parent.ax, parent.ay) + 70;
+        n.ax = Math.cos(a) * r;
+        n.ay = Math.sin(a) * r;
     }
 
-    for (const n of [...l1, ...l2]) {
-        n.ring = n.level === 2 ? sectorRadius * 1.5 : n.group === 'family' ? familyRadius : sectorRadius;
-    }
+    for (const n of [...l1, ...l2]) n.ring = Math.hypot(n.ax, n.ay);
 
     const nodes = [atlas.nodes[0], ...l1, ...l2];
     const ids = new Set(nodes.map((n) => n.id));
@@ -349,12 +355,12 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
         appliedFor.current = view;
         fittedRef.current = false;
         fg.d3Force('center', null);
-        fg.d3Force('charge')?.strength(-80).distanceMax(260);
+        fg.d3Force('charge')?.strength(-40).distanceMax(160);
         fg.d3Force('link')
             ?.distance((l: AtlasLink) => (l.level === 1 ? Math.hypot((l.target as AtlasNode).ax, (l.target as AtlasNode).ay) : 42))
             .strength((l: AtlasLink) => (l.level === 1 ? 0.02 : 0.35));
-        fg.d3Force('x', forceX<AtlasNode>((n) => n.ax).strength((n) => (n.level === 0 ? 0 : n.level === 1 ? 0.12 : 0.06)));
-        fg.d3Force('y', forceY<AtlasNode>((n) => n.ay).strength((n) => (n.level === 0 ? 0 : n.level === 1 ? 0.12 : 0.06)));
+        fg.d3Force('x', forceX<AtlasNode>((n) => n.ax).strength((n) => (n.level === 0 ? 0 : 0.2)));
+        fg.d3Force('y', forceY<AtlasNode>((n) => n.ay).strength((n) => (n.level === 0 ? 0 : 0.2)));
         fg.d3Force('ring', forceRadial<AtlasNode>((n) => n.ring ?? 0, 0, 0).strength((n) => (n.level === 0 ? 0 : 0.18)));
         fg.d3Force('collide', forceCollide<AtlasNode>((n) => {
             if (n.level === 0) return RADIUS.center + 14;
