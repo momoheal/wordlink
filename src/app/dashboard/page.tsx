@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { Activity, Trophy, Target, Calendar, Award, Compass } from 'lucide-react';
+import { Activity, Trophy, Target, Calendar, Award } from 'lucide-react';
 import { useDeviceType } from '@/lib/hooks/useMediaQuery';
 import { useForceMobileLayout } from '@/lib/hooks';
 import { useTranslations, useLocale } from 'next-intl';
@@ -389,8 +389,8 @@ export default function DashboardPage() {
                     );
                 })()}
 
-                {/* AI Agent entries */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+                {/* Learning passport entry */}
+                <div className="mb-6">
                     <Link
                         href="/passport"
                         className="group flex items-center gap-3 rounded-xl border border-amber-900/40 bg-gradient-to-r from-amber-950/30 to-neutral-900/40 p-4 transition hover:border-amber-600/60"
@@ -401,18 +401,6 @@ export default function DashboardPage() {
                         <span>
                             <span className="block text-sm font-medium text-white">{t('dashboard.sdgPassport')}</span>
                             <span className="block text-xs text-neutral-500">{t('dashboard.sdgPassportSub')}</span>
-                        </span>
-                    </Link>
-                    <Link
-                        href="/navigator"
-                        className="group flex items-center gap-3 rounded-xl border border-cyan-900/40 bg-gradient-to-r from-cyan-950/30 to-neutral-900/40 p-4 transition hover:border-cyan-600/60"
-                    >
-                        <span className="flex h-10 w-10 items-center justify-center rounded-lg border border-cyan-800/60 bg-cyan-950/40">
-                            <Compass size={18} className="text-cyan-400" />
-                        </span>
-                        <span>
-                            <span className="block text-sm font-medium text-white">{t('dashboard.blindSpotNavigator')}</span>
-                            <span className="block text-xs text-neutral-500">{t('dashboard.blindSpotNavigatorSub')}</span>
                         </span>
                     </Link>
                 </div>

@@ -37,8 +37,8 @@ export async function POST(request: Request) {
         });
 
         // Advance the per-word memory state machine (Ebbinghaus / SM-2 lite).
-        // This keeps UserWordState alive for the Learning Passport, the
-        // Cognitive Navigator and any future memory-aware feature.
+        // This keeps UserWordState alive for the Learning Passport and any
+        // future memory-aware feature.
         try {
             const existing = await prisma.userWordState.findUnique({
                 where: { userId_word: { userId: session.id, word: normalizedWord } },

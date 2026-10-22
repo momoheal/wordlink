@@ -37,10 +37,6 @@
         "due": "{count} due",
         "stats": "{count} sessions · {rate}% correct"
       },
-      "navigator": {
-        "title": "Cognitive Navigator",
-        "desc": "Chart a path from the words you know to your goal"
-      },
       "ambient": {
         "title": "Ambient Listening",
         "desc": "Let articles unfold quietly in the background"

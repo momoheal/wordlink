@@ -129,7 +129,7 @@
       "pipelineEyebrow": "Pipeline"
     },
     "gallery": {
-      "titleA": "Eleven feature modules,",
+      "titleA": "Ten feature modules,",
       "titleB": "one screenshot each",
       "intro": "All of the following are real screenshots of the running product (not design mockups). Every module is one click away from a live experience.",
       "alt": "{title} interface screenshot",
@@ -144,11 +144,6 @@
           "title": "Star-Map Workbench",
           "desc": "Lexicon outline × word details × fission star map, three panes in sync: select any word and its synonym network unfolds instantly in a force-directed star map",
           "name": "Study"
-        },
-        "navigator": {
-          "title": "Cognitive Navigator",
-          "desc": "Gap analysis between your mastered vocabulary and target exam, generating a personalized learning path so every minute counts",
-          "name": "Navigator"
         },
         "quiz": {
           "title": "Smart Quiz",

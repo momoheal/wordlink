@@ -37,10 +37,6 @@
         "due": "{count} 待复习",
         "stats": "{count} 次练习 · 正确率 {rate}%"
       },
-      "navigator": {
-        "title": "认知导航",
-        "desc": "从已掌握的词，找到通往目标的路径"
-      },
       "ambient": {
         "title": "屏保听读",
         "desc": "让文章在背景里慢慢发生"

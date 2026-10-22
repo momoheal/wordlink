@@ -7,7 +7,7 @@
  *  - 隐藏 Next.js dev 指示器(nextjs-portal)与全局悬浮按钮(BackToHome/BackToWelcome)
  *  - 视口 1600x1000(16:10,比 1920x1080 更紧凑)
  *  - 逐页 zoom:让稀疏页面内容铺满画面
- *  - 逐页 action:navigator 真实跑一遍导航、immersive 带词进图谱、my-libraries 上传 CSV、passport 等聚合完成
+ *  - 逐页 action:immersive 带词进图谱、my-libraries 上传 CSV、passport 等聚合完成
  *  - 支持只跑单页: node scripts/capture-showcase.js --only study,quiz
  *
  * 用法: node scripts/capture-showcase.js [--only name1,name2]
@@ -25,18 +25,6 @@ const DEMO_CSV = path.join(__dirname, 'legacy', 'test-my-library.csv');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const ACTIONS = {
-  // 认知导航:真实输入目标词并点击 Navigate,等待链路图谱 + AI 解释渲染(serene 实测有 4 跳链路)
-  navigator: async (page) => {
-    await page.waitForSelector('input', { timeout: 30000 });
-    await page.type('input', 'serene', { delay: 40 });
-    const clicked = await page.evaluate(() => {
-      const btn = [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Navigate');
-      if (btn) { btn.click(); return true; }
-      return false;
-    });
-    if (!clicked) await page.keyboard.press('Enter');
-    await sleep(15000);
-  },
   // 护照:等待学习数据聚合完成(加载文案消失)
   passport: async (page) => {
     await page
@@ -79,7 +67,6 @@ const ACTIONS = {
 const PAGES = [
   ['home', '/home', 8000, 1.0],
   ['study', '/study', 9000, 1.0],
-  ['navigator', '/navigator', 5000, 1.1],
   ['quiz', '/quiz', 6000, 1.3],
   ['immersive', '/immersive?word=abandon', 10000, 1.0],
   ['ambient', '/ambient', 9000, 1.0],

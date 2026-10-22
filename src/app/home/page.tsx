@@ -356,7 +356,7 @@ export default function HomePage() {
         <nav className="flex items-center gap-1 text-xs text-neutral-400">
           <Link href="/dashboard" className="hidden rounded-full px-3 py-2 transition hover:bg-neutral-900/70 hover:text-neutral-100 sm:block">{t('nav.reports')}</Link>
           <Link href="/settings" className="hidden rounded-full px-3 py-2 transition hover:bg-neutral-900/70 hover:text-neutral-100 sm:block">{t('nav.settings')}</Link>
-          <Link href="/navigator" aria-label={t('nav.search')} title={t('nav.search')} className="flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-neutral-900/70 hover:text-neutral-100"><Search size={16} /></Link>
+          <Link href="/study" aria-label={t('nav.search')} title={t('nav.search')} className="flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-neutral-900/70 hover:text-neutral-100"><Search size={16} /></Link>
           <button type="button" onClick={toggleTheme} aria-label={switchLabel} title={switchLabel} className="flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-neutral-900/70 hover:text-neutral-100">
             {dark ? <Moon size={16} /> : <Sun size={16} />}
           </button>
@@ -488,9 +488,8 @@ export default function HomePage() {
         </section>
 
         {/* Everything else */}
-        <section className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <section className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <Tile href="/ambient" icon={Headphones} tint="bg-indigo-400/12 text-indigo-300" title={t('cards.ambient.title')} desc={t('cards.ambient.desc')} />
-          <Tile href="/navigator" icon={Compass} tint="bg-cyan-400/12 text-cyan-300" title={t('cards.navigator.title')} desc={t('cards.navigator.desc')} />
           <Tile href="/my-libraries" icon={LibraryBig} tint="bg-emerald-400/12 text-emerald-300" title={t('cards.library.title')} desc={t('cards.library.desc')} meta={summary ? t('cards.library.count', { count: summary.totalWords }) : undefined} />
           <Tile href="/dashboard" icon={BarChart3} tint="bg-amber-400/12 text-amber-300" title={t('cards.report.title')} desc={t('cards.report.desc')} />
           <Tile href="/passport" icon={Waypoints} tint="bg-violet-400/12 text-violet-300" title={t('passport.badge')} desc={t('passport.desc')} />

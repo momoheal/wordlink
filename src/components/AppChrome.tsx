@@ -20,7 +20,6 @@ const SHELL_ROUTES: ShellRoute[] = [
   { prefix: '/read', exact: true, rail: true, mobileBar: false },
   { prefix: '/quiz', exact: true, rail: true, mobileBar: false },
   { prefix: '/my-libraries', rail: true, mobileBar: true },
-  { prefix: '/navigator', rail: true, mobileBar: true },
   { prefix: '/passport', rail: true, mobileBar: true },
   { prefix: '/dashboard', rail: true, mobileBar: false },
   { prefix: '/history', rail: true, mobileBar: false },

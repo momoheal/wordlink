@@ -5,7 +5,7 @@ import crypto from 'crypto';
 /**
  * Unified AI Gateway for WordLink Agent Matrix
  * ---------------------------------------------
- * All vertical agents (passport / navigator / tutor ...)
+ * All vertical agents (passport / tutor ...)
  * share this single gateway so that:
  *   1. Prompt templates live in one place  -> data/ai_prompts/*.txt
  *   2. DeepSeek calls are centralized       -> streaming + non-streaming

@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { cacheDelete } from '@/lib/client-cache';
 import ThemeToggle from '@/components/ThemeToggle';
-import { BarChart3, BookOpenText, Compass, FileClock, Headphones, LibraryBig, LogOut, MoonStar, ScanText, Settings, ShieldCheck, Waypoints } from 'lucide-react';
+import { BarChart3, BookOpenText, FileClock, Headphones, LibraryBig, LogOut, MoonStar, ScanText, Settings, ShieldCheck, Waypoints } from 'lucide-react';
 
 const PRIMARY_NAV = [
   { href: '/study', icon: Waypoints, labelKey: 'study' },
@@ -18,7 +18,6 @@ const PRIMARY_NAV = [
 const INSIGHT_NAV = [
   { href: '/history', icon: FileClock, labelKey: 'history' },
   { href: '/dashboard', icon: BarChart3, labelKey: 'dashboard' },
-  { href: '/navigator', icon: Compass, labelKey: 'navigator' },
   { href: '/passport', icon: ShieldCheck, labelKey: 'passport' },
 ];
 

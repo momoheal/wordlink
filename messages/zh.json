@@ -236,8 +236,6 @@
     "wordsUnit": "词",
     "sdgPassport": "SDG 4 学习护照",
     "sdgPassportSub": "XAI 可解释学情认证 · CEFR 六维雷达",
-    "blindSpotNavigator": "认知盲区导航器",
-    "blindSpotNavigatorSub": "图谱最短激活链 · AI 逐跳讲解",
     "loadFailed": "加载学习面板数据失败，请确认已登录。",
     "cellTooltip": "{word} · {date}：得分 {score}"
   },
@@ -599,7 +597,6 @@
     "logoutFailed": "退出登录失败",
     "wordNotFound": "单词 \"{word}\" 未在数据库中找到。",
     "welcomeBack": "欢迎回来，{name}！",
-    "navigator": "导航器",
     "upgradePro": "升级 Pro"
   },
   "passport": {
@@ -626,19 +623,6 @@
     "narrativeTitle": "XAI 学习叙事",
     "footerCredit": "Lexiverse · AI for SDGs 全球青年创新大赛 2026"
   },
-  "navigator": {
-    "back": "返回",
-    "title": "认知盲区导航器",
-    "subtitle": "AI 在裂变图谱上计算一条从「你已掌握的词」通往「目标词」的最短认知激活链。",
-    "placeholder": "输入你想攻克的目标词，如 ubiquitous…",
-    "find": "寻径",
-    "searching": "正在图谱上搜索最短激活链…",
-    "error": "导航暂时失败，请稍后重试。",
-    "notFound": "在 4 跳范围内没有找到通往该词的激活路径，换一个目标试试。",
-    "routeFound": "已找到认知激活路线",
-    "routeStats": "{hops} 跳 · {seeds} 个起点词",
-    "coachingBrief": "AI 路径教练简报"
-  },
   "appRail": {
     "study": "星图工作台",
     "read": "语境精读",
@@ -647,7 +631,6 @@
     "myLibraries": "我的词库",
     "history": "历史记录",
     "dashboard": "学习报告",
-    "navigator": "认知导航",
     "passport": "学习护照",
     "settings": "设置",
     "productTour": "产品介绍",

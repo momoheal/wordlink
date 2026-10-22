@@ -24,7 +24,12 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL('/', request.url));
     }
 
-    // / 为公开 Landing Page；/study, /immersive, /graph, /ambient, /read, /passport, /navigator, /quiz, /model 为免登体验（展位演示与评审体验）；应用内数据操作按需校验
+    // 兼容旧链接：认知导航已下线，转到星图工作台（查词在左侧词表）
+    if (pathname === '/navigator') {
+        return NextResponse.redirect(new URL('/study', request.url));
+    }
+
+    // / 为公开 Landing Page；/study, /immersive, /graph, /ambient, /read, /passport, /quiz, /model 为免登体验（展位演示与评审体验）；应用内数据操作按需校验
     const isPublicPath =
         pathname === '/' ||
         pathname === '/study' ||
@@ -34,7 +39,6 @@ export async function middleware(request: NextRequest) {
         pathname === '/read' ||
         pathname.startsWith('/read/') ||
         pathname === '/passport' ||
-        pathname === '/navigator' ||
         pathname === '/model' ||
         pathname === '/pricing' ||
         pathname.startsWith('/pay/return') ||

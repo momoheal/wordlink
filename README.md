@@ -52,8 +52,8 @@ The right-hand panel of the workspace is a map of the selected word.
   when the word comes back.
 - **Graded reading**: articles with click-to-define on every word and the graph in a side drawer.
 - **Ambient mode**: a full-screen word stream with four seasonal soundscapes, synthesized live with Web Audio.
-- **Also**: learning passport (a report of what you have studied), navigator (a path through the graph to a
-  target word), custom word books from CSV, AI tutor chat, English/Chinese interface, light and dark themes.
+- **Also**: learning passport (a report of what you have studied), custom word books from CSV, AI tutor chat,
+  English/Chinese interface, light and dark themes.
 
 <p align="center">
   <img src="public/images/showcase/workspace-light.jpg" width="80%" alt="Light theme">

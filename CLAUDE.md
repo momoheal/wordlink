@@ -46,7 +46,7 @@ characters. Do not switch them back unless the checkout lives under an ASCII-onl
 - `src/app/` — pages and `api/` route handlers
   - `/` landing · `/study` main workspace (word list | word detail | graph) · `/home` daily dashboard
   - `/quiz/*` select / spelling / recall · `/read` graded reading · `/ambient` screensaver mode
-  - `/immersive` full-screen graph · `/passport` learning report · `/navigator` graph path-finding toward a target word
+  - `/immersive` full-screen graph · `/passport` learning report
   - `/my-libraries` custom word books · `/pricing`, `/pay/return` payments · `/model` model tech report
 - `src/components/` — UI. Workspace: `ThreeColumnLayout`, `WordList`, `WordDetail`, `PanelFissionGraph`
   (the word graph: in the workspace and the reader drawer, and full-screen on `/immersive` with

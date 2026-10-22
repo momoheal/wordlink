@@ -2,7 +2,7 @@
 
 /**
  * S6 · 全功能巡礼
- * 11 张真机截图(由 scripts/capture-showcase.js 自动采集)组成的滚动画廊。
+ * 10 张真机截图(由 scripts/capture-showcase.js 自动采集)组成的滚动画廊。
  * title/desc 文案经 landing.gallery.features 分片接入 i18n。
  */
 import Link from 'next/link';
@@ -11,7 +11,6 @@ import { useTranslations } from 'next-intl';
 const FEATURES: Array<{ img: string; name: string; id: string; href: string }> = [
     { img: '/images/showcase/home.jpg', name: 'Workspace', id: 'workspace', href: '/home' },
     { img: '/images/showcase/study.jpg', name: 'Study', id: 'study', href: '/study' },
-    { img: '/images/showcase/navigator.jpg', name: 'Navigator', id: 'navigator', href: '/navigator' },
     { img: '/images/showcase/quiz.jpg', name: 'Quiz', id: 'quiz', href: '/quiz' },
     { img: '/images/showcase/immersive.jpg', name: 'Immersive', id: 'immersive', href: '/immersive' },
     { img: '/images/showcase/ambient.jpg', name: 'Ambient', id: 'ambient', href: '/ambient' },
