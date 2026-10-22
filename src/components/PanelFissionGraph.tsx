@@ -60,26 +60,38 @@ const SPRING_RESPONSE_MS = 550;
 const OMEGA = (2 * Math.PI) / SPRING_RESPONSE_MS;
 /** By then the spring is within 0.05% of its target; snap to the exact end state. */
 const SETTLE_MS = 900;
-/** Hover emphasis eases with this time constant (about 95% there after three of them). */
-const HOVER_EASE_MS = 60;
+/** Hover emphasis rides a quicker spring of its own; during a transition it follows the transition's. */
+const HOVER_RESPONSE_MS = 280;
+/**
+ * Fades run on the transition spring, only slightly sped up, so colour and opacity change over the same
+ * stretch of time as the movement: what leaves clears out a little sooner than what arrives settles in.
+ */
+const EXIT_SPEED = 1.25;
+const ENTER_SPEED = 1.1;
 /** Screen space kept around the layout for labels and group pills. */
 const FRAME_PADDING = 60;
 
 /**
- * Offset from the target and velocity (per ms) of the spring, `ms` after it was released at `offset`
- * moving at `velocity`. Starting from the current velocity is what lets a transition that interrupts
- * another carry on without a jolt.
+ * Offset from the target and velocity (per ms) of a critically damped spring with angular frequency
+ * `omega`, `ms` after it left `offset` moving at `velocity`. Starting from the current velocity is what
+ * lets a motion that interrupts another carry on without a jolt.
  */
+function springStep(offset: number, velocity: number, ms: number, omega: number): [number, number] {
+    const c = velocity + omega * offset;
+    const e = Math.exp(-omega * ms);
+    return [(offset + c * ms) * e, (velocity - omega * c * ms) * e];
+}
+
+/** The transition spring; it snaps to its end state once settled. */
 function springState(offset: number, velocity: number, ms: number): [number, number] {
-    if (ms >= SETTLE_MS) return [0, 0];
-    const t = Math.max(0, ms);
-    const c = velocity + OMEGA * offset;
-    const e = Math.exp(-OMEGA * t);
-    return [(offset + c * t) * e, (velocity - OMEGA * c * t) * e];
+    return ms >= SETTLE_MS ? [0, 0] : springStep(offset, velocity, Math.max(0, ms), OMEGA);
 }
 
 /** 0 → 1 along the same spring from rest; drives fades and morphs. */
 const spring = (ms: number) => 1 - springState(1, 0, ms)[0];
+/** 0 → 1 from rest on a spring of another response (settled after three responses, which also covers "long ago"). */
+const springTo = (ms: number, responseMs: number) =>
+    (ms >= 3 * responseMs ? 1 : 1 - springStep(1, 0, Math.max(0, ms), (2 * Math.PI) / responseMs)[0]);
 
 // With the OS "reduce motion" setting on, transitions jump straight to their end state.
 const reducedMotionQuery = typeof window !== 'undefined' ? window.matchMedia?.('(prefers-reduced-motion: reduce)') : undefined;
@@ -323,6 +335,7 @@ function snapshotOf(view: View | null, toGraph: ((x: number, y: number) => Point
 }
 
 const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 const radiusOf = (n: Pick<AtlasNode, 'level'>) => (n.level === 0 ? RADIUS.center : n.level === 1 ? RADIUS.l1 : RADIUS.l2);
 
@@ -501,26 +514,37 @@ function ghostsOf(target: View, outgoing: View, motion: NodeMotion | null, pills
     };
 }
 
-/** 0 → 1 as something new fades in, on the same spring as the movement (opacity leads slightly). */
-const fadeIn = (born: number | undefined, now: number) => (!born ? 1 : clamp01(spring(now - born) * 1.6));
-/** 0 → 1 as a word or link changes into its new role. */
+/** 0 → 1 as something new fades in. */
+const fadeIn = (born: number | undefined, now: number) => (!born ? 1 : clamp01(spring(now - born) * ENTER_SPEED));
+/** 1 → 0 as something that has left fades out. */
+const fadeOut = (at: number, now: number) => (reducedMotion() ? 0 : 1 - clamp01(spring(now - at) * EXIT_SPEED));
+/** 0 → 1 as a word or link changes into its new role, in step with its movement. */
 const morphOf = (morph: { at: number } | undefined, now: number) => (morph ? spring(now - morph.at) : 1);
 
-interface Eased { v: number; t: number }
+interface Animated { v: number; vel: number; t: number }
 
-/** Moves a stored value toward `target` with exponential easing, independent of the frame rate. */
-function eased(store: Map<string, Eased>, key: string, target: number, now: number): number {
-    const e = store.get(key);
-    if (!e || reducedMotion()) {
-        store.set(key, { v: target, t: now });
+/**
+ * Moves a stored value toward `target` on a critically damped spring, carrying its velocity across
+ * target changes, so emphasis never snaps, not even when the target flips half-way.
+ */
+function animated(store: Map<string, Animated>, key: string, target: number, now: number, responseMs: number): number {
+    const a = store.get(key);
+    if (!a || reducedMotion()) {
+        store.set(key, { v: target, vel: 0, t: now });
         return target;
     }
-    if (now > e.t) {
-        e.v = target + (e.v - target) * Math.exp(-(now - e.t) / HOVER_EASE_MS);
-        e.t = now;
+    if (now > a.t) {
+        const [offset, vel] = springStep(a.v - target, a.vel, now - a.t, (2 * Math.PI) / responseMs);
+        const resting = Math.abs(offset) < 1e-4 && Math.abs(vel) < 1e-6;
+        a.v = resting ? target : target + offset;
+        a.vel = resting ? 0 : vel;
+        a.t = now;
     }
-    return e.v;
+    return a.v;
 }
+
+/** A stored value as it stands, left where it is (for what is fading out). */
+const held = (store: Map<string, Animated>, key: string) => store.get(key)?.v ?? 0;
 
 // ---------------------------------------------------------------------------
 // Drawing
@@ -534,16 +558,18 @@ const PALETTE: Record<Theme, {
     center: [string, string, string];
     /** Dark theme lets nodes glow; light theme gives them a soft drop shadow instead. */
     glow: boolean;
+    /** The pointer's colour, as "r, g, b". */
+    pointer: string;
 }> = {
     dark: {
         bg: '#05070d', ink: '#eaf2ff', muted: '#8ca3c4', halo: 'rgba(5,7,13,0.92)', edgeAlpha: 0.45,
         bubbleFill: 'rgba(167,139,250,0.06)', ring: 'rgba(234,242,255,0.9)', weakRing: '#fb7185',
-        center: ['#e0f2fe', '#38bdf8', '#075985'], glow: true,
+        center: ['#e0f2fe', '#38bdf8', '#075985'], glow: true, pointer: '234, 242, 255',
     },
     light: {
         bg: '#f1ede4', ink: '#20302c', muted: '#61706b', halo: 'rgba(241,237,228,0.95)', edgeAlpha: 0.5,
         bubbleFill: 'rgba(139,92,246,0.05)', ring: 'rgba(32,48,44,0.85)', weakRing: '#e11d48',
-        center: ['#a7f3d0', '#1b6c53', '#0f3d2e'], glow: false,
+        center: ['#a7f3d0', '#1b6c53', '#0f3d2e'], glow: false, pointer: '32, 48, 44',
     },
 };
 type Palette = (typeof PALETTE)[Theme];
@@ -562,48 +588,122 @@ function mix(hex: string, other: string, t: number): string {
     return `rgb(${channel(16)}, ${channel(8)}, ${channel(0)})`;
 }
 
-// Jewels are rendered once per colour into a bitmap; stamping a bitmap is far cheaper than a blurred
-// gradient per word per frame, which keeps animations at a steady frame rate.
+type Oklch = [number, number, number];
+const oklchCache = new Map<string, Oklch>();
+
+/** '#rrggbb' or 'rgb(r, g, b)' as OKLCH: lightness, chroma, hue (radians). */
+function oklchOf(css: string): Oklch {
+    let c = oklchCache.get(css);
+    if (!c) {
+        const srgb = css.startsWith('#') ? [1, 3, 5].map((i) => parseInt(css.slice(i, i + 2), 16)) : css.match(/[\d.]+/g)!.slice(0, 3).map(Number);
+        const [r, g, b] = srgb.map((v) => (v / 255 <= 0.04045 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4));
+        const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+        const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+        const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+        const A = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
+        const B = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
+        c = [0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s, Math.hypot(A, B), Math.atan2(B, A)];
+        oklchCache.set(css, c);
+    }
+    return c;
+}
+
+/** Linear-light sRGB of an OKLCH colour, or null when the screen cannot show it. */
+function linearRgb(L: number, C: number, h: number): [number, number, number] | null {
+    const A = C * Math.cos(h), B = C * Math.sin(h);
+    const l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3;
+    const m = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3;
+    const s = (L - 0.0894841775 * A - 1.2914855480 * B) ** 3;
+    const rgb: [number, number, number] = [
+        4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+        -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+        -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s,
+    ];
+    return rgb.every((v) => v >= -1e-4 && v <= 1 + 1e-4) ? rgb : null;
+}
+
+/**
+ * Blends two colours in OKLCH, the short way round the hue circle. The colours in between keep the
+ * brightness and vividness of the two ends instead of passing through a muddy grey, so a word that changes
+ * relation changes colour cleanly. Chroma gives way only as far as the screen's gamut requires.
+ */
+function blend(a: string, b: string, t: number): string {
+    if (t <= 0) return a;
+    if (t >= 1) return b;
+    const [L1, C1, h1] = oklchOf(a), [L2, C2, h2] = oklchOf(b);
+    let dh = h2 - h1;
+    if (dh > Math.PI) dh -= 2 * Math.PI; else if (dh < -Math.PI) dh += 2 * Math.PI;
+    // A nearly grey end has no hue worth turning from: take the other end's.
+    const h = C1 < 0.02 ? h2 : C2 < 0.02 ? h1 : h1 + dh * t;
+    const L = lerp(L1, L2, t), C = lerp(C1, C2, t);
+    let rgb = linearRgb(L, C, h);
+    if (!rgb) {
+        let lo = 0, hi = C;
+        for (let i = 0; i < 10; i++) {
+            const mid = (lo + hi) / 2;
+            if (linearRgb(L, mid, h)) lo = mid; else hi = mid;
+        }
+        rgb = linearRgb(L, lo, h)!;
+    }
+    const [r, g, bl] = rgb.map((v) => {
+        const c = clamp01(v);
+        return Math.round(255 * (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055));
+    });
+    return `rgb(${r}, ${g}, ${bl})`;
+}
+
+// The blurred halo under a jewel (a glow on dark, a drop shadow on paper) is rendered once per colour into a
+// bitmap: stamping a bitmap is far cheaper than a blur per word per frame. The body on top is a plain
+// gradient drawn directly, so its colours can blend freely while a word changes relation.
 const SPRITE_RADIUS = 40;
 const SPRITE_PAD = 44;
-const sprites = new Map<string, HTMLCanvasElement>();
+const halos = new Map<string, HTMLCanvasElement>();
 
-function jewelSprite(stops: [string, string, string], glow: boolean): HTMLCanvasElement {
-    const key = `${stops.join()}|${glow}`;
-    let sprite = sprites.get(key);
+function haloSprite(color: string, glow: boolean): HTMLCanvasElement {
+    const key = glow ? color : 'shadow';
+    let sprite = halos.get(key);
     if (!sprite) {
         const size = (SPRITE_RADIUS + SPRITE_PAD) * 2;
         const c = size / 2;
         sprite = document.createElement('canvas');
         sprite.width = sprite.height = size;
         const ctx = sprite.getContext('2d')!;
-        const [highlight, body, rim] = stops;
+        // Only the shadow lands on the bitmap: the disc casting it sits off to the side.
+        const away = size * 2;
+        ctx.shadowOffsetX = away;
         if (glow) {
-            ctx.shadowColor = body;
+            ctx.shadowColor = color;
             ctx.shadowBlur = 36;
         } else {
             ctx.shadowColor = 'rgba(60, 45, 20, 0.30)';
             ctx.shadowBlur = 12;
             ctx.shadowOffsetY = 4;
         }
-        const gradient = ctx.createRadialGradient(c - SPRITE_RADIUS * 0.35, c - SPRITE_RADIUS * 0.4, SPRITE_RADIUS * 0.1, c, c, SPRITE_RADIUS);
-        gradient.addColorStop(0, highlight);
-        gradient.addColorStop(0.55, body);
-        gradient.addColorStop(1, rim);
         ctx.beginPath();
-        ctx.arc(c, c, SPRITE_RADIUS, 0, Math.PI * 2);
-        ctx.fillStyle = gradient;
+        ctx.arc(c - away, c, SPRITE_RADIUS, 0, Math.PI * 2);
+        ctx.fillStyle = '#000';
         ctx.fill();
-        sprites.set(key, sprite);
+        halos.set(key, sprite);
     }
     return sprite;
 }
 
-/** Solid "jewel" node: a radial gradient in the relation colour, glowing on dark, shadowed on paper. */
-function paintJewel(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, stops: [string, string, string], palette: Palette) {
-    const sprite = jewelSprite(stops, palette.glow);
+function paintHalo(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, color: string, palette: Palette) {
+    const sprite = haloSprite(color, palette.glow);
     const size = sprite.width * (r / SPRITE_RADIUS);
     ctx.drawImage(sprite, x - size / 2, y - size / 2, size, size);
+}
+
+/** The body of a jewel: a radial gradient, lit from the upper left. */
+function paintDisc(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, [highlight, body, rim]: readonly string[]) {
+    const gradient = ctx.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.1, x, y, r);
+    gradient.addColorStop(0, highlight);
+    gradient.addColorStop(0.55, body);
+    gradient.addColorStop(1, rim);
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = gradient;
+    ctx.fill();
 }
 
 /** The dashed word-family bubble. */
@@ -668,11 +768,12 @@ function paintProgressRing(ctx: CanvasRenderingContext2D, x: number, y: number, 
     ctx.restore();
 }
 
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-
-/** While a role changes, the old look stays opaque until the new one is, so the word never thins out. */
-const morphLayers = <T,>(from: T | undefined, to: T, m: number, same: boolean): Array<[T, number]> =>
-    !from || same || m >= 1 ? [[to, 1]] : [[from, clamp01(2 * (1 - m))], [to, clamp01(2 * m)]];
+/**
+ * Cross-fades two drawings of the same thing. Each layer stays opaque for part of the way (`overlap` > 1),
+ * so the thing never thins out in the middle.
+ */
+const morphLayers = <T,>(from: T | undefined, to: T, m: number, same: boolean, overlap = 2): Array<[T, number]> =>
+    !from || same || m >= 1 ? [[to, 1]] : [[from, clamp01(overlap * (1 - m))], [to, clamp01(overlap * m)]];
 
 /** Radius of a word in this role; `emphasis` (0–1) is how much it is hovered. */
 function radiusFor(look: Look, emphasis: number): number {
@@ -683,28 +784,38 @@ function radiusFor(look: Look, emphasis: number): number {
 
 const hasRing = (look: Look) => look.level === 0 || (look.level === 1 && !look.placeholder);
 
-/** A word's body: a jewel, a dashed hollow circle (no dictionary entry yet) or a small dot (second degree). */
-function paintBody(ctx: CanvasRenderingContext2D, look: Look, x: number, y: number, r: number, emphasis: number, palette: Palette, scale: number) {
+/** How a word's body is drawn in a role: gradient stops, opacity, and how much halo it casts. */
+interface BodyStyle { stops: readonly [string, string, string]; alpha: number; halo: number }
+
+/** Null for a neighbour without a dictionary entry, drawn as a dashed hollow circle instead. */
+function bodyStyle(look: Look, palette: Palette): BodyStyle | null {
     if (look.level === 2) {
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, Math.PI * 2);
-        ctx.fillStyle = GROUP_COLORS[look.group!];
-        ctx.globalAlpha *= look.placeholder ? 0.35 : 0.7;
-        ctx.fill();
-    } else if (look.level === 1 && look.placeholder) {
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, Math.PI * 2);
-        ctx.fillStyle = palette.bg;
-        ctx.fill();
-        ctx.setLineDash([3 / scale, 3 / scale]);
-        ctx.strokeStyle = palette.muted;
-        ctx.lineWidth = 1.5 / scale;
-        ctx.stroke();
-        ctx.setLineDash([]);
-    } else {
-        const stops = look.level === 0 ? palette.center : jewelStops(GROUP_COLORS[look.group!]);
-        paintJewel(ctx, x, y, r * (1 + 0.12 * emphasis), stops, palette);
+        const c = GROUP_COLORS[look.group!];
+        return { stops: [c, c, c], alpha: look.placeholder ? 0.35 : 0.7, halo: 0 };
     }
+    if (look.placeholder && look.level === 1) return null;
+    return { stops: look.level === 0 ? palette.center : jewelStops(GROUP_COLORS[look.group!]), alpha: 1, halo: 1 };
+}
+
+/** A word's body in one role: a jewel, a small dot (second degree) or a dashed hollow circle. */
+function paintBody(ctx: CanvasRenderingContext2D, look: Look, x: number, y: number, r: number, emphasis: number, palette: Palette, scale: number) {
+    const style = bodyStyle(look, palette);
+    if (style) {
+        const jewel = r * (1 + 0.12 * style.halo * emphasis);
+        if (style.halo) paintHalo(ctx, x, y, jewel, style.stops[1], palette);
+        ctx.globalAlpha *= style.alpha;
+        paintDisc(ctx, x, y, jewel, style.stops);
+        return;
+    }
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = palette.bg;
+    ctx.fill();
+    ctx.setLineDash([3 / scale, 3 / scale]);
+    ctx.strokeStyle = palette.muted;
+    ctx.lineWidth = 1.5 / scale;
+    ctx.stroke();
+    ctx.setLineDash([]);
 }
 
 /** Everything that decides how one word is drawn in a frame. */
@@ -726,13 +837,29 @@ interface WordPaint {
 function paintWord(ctx: CanvasRenderingContext2D, w: WordPaint, palette: Palette, scale: number) {
     const from = w.from ?? w.look;
     const r = lerp(radiusFor(from, w.emphasis), radiusFor(w.look, w.emphasis), w.m) * w.grow;
-    for (const [look, a] of morphLayers(w.from, w.look, w.m, false)) {
-        if (a <= 0) continue;
-        ctx.save();
-        ctx.globalAlpha = w.alpha * a;
-        paintBody(ctx, look, w.x, w.y, r, w.emphasis, palette, scale);
-        ctx.restore();
+    const a = bodyStyle(from, palette), b = bodyStyle(w.look, palette);
+    ctx.save();
+    if (w.from && w.m < 1 && a && b) {
+        // A word changing relation stays one body whose colours blend along its movement; only the soft
+        // halos under it cross-fade (the paper theme's shadow is the same for every colour).
+        const jewel = r * (1 + 0.12 * lerp(a.halo, b.halo, w.m) * w.emphasis);
+        const halos: Array<[BodyStyle, number]> = palette.glow ? [[a, a.halo * (1 - w.m)], [b, b.halo * w.m]] : [[b, lerp(a.halo, b.halo, w.m)]];
+        for (const [style, weight] of halos) {
+            if (weight <= 0) continue;
+            ctx.globalAlpha = w.alpha * weight;
+            paintHalo(ctx, w.x, w.y, jewel, style.stops[1], palette);
+        }
+        ctx.globalAlpha = w.alpha * lerp(a.alpha, b.alpha, w.m);
+        paintDisc(ctx, w.x, w.y, jewel, a.stops.map((c, i) => blend(c, b.stops[i], w.m)));
+    } else {
+        // Hollow placeholders have no colour to blend toward: cross-fade the two drawings instead.
+        for (const [look, layer] of morphLayers(w.from, w.look, w.m, false)) {
+            if (layer <= 0) continue;
+            ctx.globalAlpha = w.alpha * layer;
+            paintBody(ctx, look, w.x, w.y, r, w.emphasis, palette, scale);
+        }
     }
+    ctx.restore();
     const ring = lerp(Number(hasRing(from)), Number(hasRing(w.look)), w.m) * w.ringAlpha;
     if (ring > 0 && w.familiarity) {
         ctx.save();
@@ -778,7 +905,7 @@ function paintLabel(ctx: CanvasRenderingContext2D, l: LabelPaint, palette: Palet
     ctx.lineJoin = 'round';
     ctx.lineWidth = 3.5 / scale;
     ctx.strokeStyle = palette.halo;
-    for (const [look, a] of morphLayers(l.from, l.look, l.m, sameText)) {
+    for (const [look, a] of morphLayers(l.from, l.look, l.m, sameText, 1.5)) {
         if (a <= 0) continue;
         ctx.globalAlpha = alpha * a;
         ctx.font = labelFont(look, px, scale);
@@ -814,13 +941,88 @@ function paintEdge(
     ctx.save();
     // Lines are translucent, so a changing colour is blended rather than layered.
     ctx.globalAlpha = shown;
-    ctx.strokeStyle = prev.group === style.group ? GROUP_COLORS[style.group] : mix(GROUP_COLORS[prev.group], GROUP_COLORS[style.group], m);
+    ctx.strokeStyle = prev.group === style.group ? GROUP_COLORS[style.group] : blend(GROUP_COLORS[prev.group], GROUP_COLORS[style.group], m);
     ctx.lineWidth = lerp(lerp(width(prev), width(style), m), 2, lit) / scale;
     if ((m < 0.5 ? prev : style).pending) ctx.setLineDash([5 / scale, 4 / scale]);
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
     ctx.lineTo(b.x, b.y);
     ctx.stroke();
+    ctx.restore();
+}
+
+// ---------------------------------------------------------------------------
+// Pointer. Like the iPad's: a soft dot that snaps to a word it comes close to and turns into a highlight
+// behind it, while the word leans slightly toward it. The snapped word takes the click, so small words
+// and their labels are easy to hit.
+// ---------------------------------------------------------------------------
+
+/** The pointer snaps to a word within this distance (screen px) of the word or its label… */
+const MAGNET_PX = 14;
+/** …and, once snapped, lets go only this much further out, so it does not flicker at the edge. */
+const STICKY_PX = 10;
+/** How far a snapped word leans toward the pointer, at most (screen px). */
+const LIFT_PX = 4;
+/** Dot and highlight morph into each other on a quick spring. */
+const POINTER_RESPONSE_MS = 240;
+
+/** A box on screen (px, in graph-area coordinates). */
+interface Box { x: number; y: number; w: number; h: number }
+/** The pointer's outline: a rounded box that is a dot (`dot` = 1) or a highlight behind a word (0). */
+interface PointerShape extends Box { r: number; dot: number }
+
+let measure: CanvasRenderingContext2D | null = null;
+const labelWidths = new Map<string, number>();
+
+/** On-screen width of a word's label (px). */
+function labelWidth(n: Look & { name: string }): number {
+    const key = `${n.level}|${n.name}`;
+    let w = labelWidths.get(key);
+    if (w === undefined) {
+        measure ??= document.createElement('canvas').getContext('2d');
+        if (!measure) return n.name.length * 7;
+        measure.font = labelFont(n, LABEL_PX[n.level], 1);
+        w = measure.measureText(n.name).width;
+        labelWidths.set(key, w);
+    }
+    return w;
+}
+
+/** The part of the screen a word takes up: its body and, where it is shown, its label. */
+function wordBox(n: AtlasNode, at: Point, k: number): Box {
+    const r = radiusFor(n, 0) * k;
+    // Second-degree labels only show once zoomed in (see paintLabels).
+    if (n.level === 2 && k < 1.4) return { x: at.x - r, y: at.y - r, w: 2 * r, h: 2 * r };
+    const w = Math.max(2 * r, labelWidth(n));
+    const bottom = at.y + labelGap(n) * k + 3 + LABEL_PX[n.level] * 1.25;
+    return { x: at.x - w / 2, y: at.y - r, w, h: bottom - at.y + r };
+}
+
+/** How far outside a box a point is (0 inside it). */
+const gapTo = (b: Box, x: number, y: number) =>
+    Math.hypot(Math.max(b.x - x, 0, x - b.x - b.w), Math.max(b.y - y, 0, y - b.y - b.h));
+
+const dotAt = (p: Point): PointerShape => ({ x: p.x - 8, y: p.y - 8, w: 16, h: 16, r: 8, dot: 1 });
+const highlightOf = (b: Box): PointerShape => ({ x: b.x - 7, y: b.y - 5, w: b.w + 14, h: b.h + 10, r: 10, dot: 0 });
+const lerpShape = (a: PointerShape, b: PointerShape, t: number): PointerShape => ({
+    x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t), w: lerp(a.w, b.w, t), h: lerp(a.h, b.h, t), r: lerp(a.r, b.r, t), dot: lerp(a.dot, b.dot, t),
+});
+
+/** Paints the pointer in screen space, whatever transform the canvas has. */
+function paintPointer(ctx: CanvasRenderingContext2D, s: PointerShape, alpha: number, palette: Palette) {
+    ctx.save();
+    const dpr = window.devicePixelRatio || 1;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.roundRect(s.x, s.y, s.w, s.h, Math.min(s.r, s.w / 2, s.h / 2));
+    ctx.fillStyle = `rgba(${palette.pointer}, ${lerp(0.08, 0.5, s.dot)})`;
+    ctx.fill();
+    if (s.dot < 1) {
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = `rgba(${palette.pointer}, ${0.14 * (1 - s.dot)})`;
+        ctx.stroke();
+    }
     ctx.restore();
 }
 
@@ -939,11 +1141,17 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
     const toggledPills = useRef<PillShot[]>([]);
     /** When each word's familiarity first arrived; its ring fades in from then. */
     const ringSince = useRef(new Map<string, number>());
-    /** Hover emphasis per word and link, eased instead of switched. */
-    const easing = useRef(new Map<string, Eased>());
-    /** The word under the pointer, from where words are drawn now. */
-    const pointerOver = useRef<AtlasNode | null>(null);
+    /** Hover emphasis and pointer state per word and link, animated instead of switched. */
+    const easing = useRef(new Map<string, Animated>());
+    /** Where the mouse is over the canvas (px, graph-area coordinates); null when it is elsewhere. */
+    const pointer = useRef<Point | null>(null);
+    const lastPointer = useRef<Point>({ x: 0, y: 0 });
+    /** The word the pointer has snapped to (`to`), and the outline it has been morphing from since `at`. */
+    const pointerMorph = useRef<{ from: PointerShape; to: AtlasNode | null; at: number }>({ from: dotAt({ x: 0, y: 0 }), to: null, at: -Infinity });
+    /** Words that moved under a pointer at rest do not light up until it moves. */
+    const pointerStill = useRef(false);
     const pressedAt = useRef<Point | null>(null);
+    const dragging = useRef(false);
 
     const data = fetched?.graph ?? null;
     const shownWord = fetched?.word ?? null;
@@ -962,7 +1170,11 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
         if (!word) return;
         let live = true;
         loadGraph(word)
-            .then((graph) => { if (live) setFetched({ word, graph, from: takeSnapshot() }); })
+            .then((graph) => {
+                if (!live) return;
+                setFetched({ word, graph, from: takeSnapshot() });
+                setHovered(null);
+            })
             .catch(() => { if (live) setFetched({ word, graph: { nodes: [], links: [] }, from: null }); });
         return () => { live = false; };
     }, [word, takeSnapshot]);
@@ -1032,6 +1244,79 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
         return () => window.removeEventListener('keydown', onKey);
     }, []);
 
+    // ---- pointer ---------------------------------------------------------------
+    /** How far a word is drawn off its place (screen px), leaning toward the pointer that snapped to it. */
+    const liftOf = useCallback((n: AtlasNode, now: number): Point => {
+        const fg = fgRef.current, p = pointer.current;
+        let tx = 0, ty = 0;
+        if (fg && p && n === pointerMorph.current.to && n.x !== undefined && n.y !== undefined) {
+            const c = fg.graph2ScreenCoords(n.x, n.y);
+            const dx = (p.x - c.x) * 0.15, dy = (p.y - c.y) * 0.15;
+            const shrink = Math.min(1, LIFT_PX / (Math.hypot(dx, dy) || 1));
+            tx = dx * shrink;
+            ty = dy * shrink;
+        }
+        const e = easing.current;
+        return { x: animated(e, `lx:${n.id}`, tx, now, POINTER_RESPONSE_MS), y: animated(e, `ly:${n.id}`, ty, now, POINTER_RESPONSE_MS) };
+    }, []);
+
+    /** The highlight behind a snapped word, or the dot under the pointer. */
+    const pointerTarget = useCallback((to: AtlasNode | null, now: number): PointerShape => {
+        const fg = fgRef.current;
+        if (!to || !fg || to.x === undefined || to.y === undefined) return dotAt(lastPointer.current);
+        const c = fg.graph2ScreenCoords(to.x, to.y);
+        const lift = liftOf(to, now);
+        return highlightOf(wordBox(to, { x: c.x + lift.x, y: c.y + lift.y }, fg.zoom()));
+    }, [liftOf]);
+
+    const pointerShape = useCallback((now: number): PointerShape => {
+        const m = pointerMorph.current;
+        return lerpShape(m.from, pointerTarget(m.to, now), reducedMotion() ? 1 : springTo(now - m.at, POINTER_RESPONSE_MS));
+    }, [pointerTarget]);
+
+    /** Snaps the pointer to a word (null lets go), morphing from wherever its outline is now. */
+    const snapTo = useCallback((to: AtlasNode | null) => {
+        if (to === pointerMorph.current.to) return;
+        const now = performance.now();
+        pointerMorph.current = { from: pointerShape(now), to, at: now };
+    }, [pointerShape]);
+
+    /** The word a pointer at (x, y) snaps to: the closest within reach, the current one keeping ties. */
+    const snapTarget = useCallback((x: number, y: number): AtlasNode | null => {
+        const fg = fgRef.current;
+        if (!fg || !view) return null;
+        const k = fg.zoom();
+        const current = pointerMorph.current.to;
+        let best: AtlasNode | null = null, bestScore = Infinity;
+        for (const n of view.nodes) {
+            if (n.x === undefined || n.y === undefined) continue;
+            const c = fg.graph2ScreenCoords(n.x, n.y);
+            const gap = gapTo(wordBox(n, c, k), x, y);
+            if (gap > MAGNET_PX + (n === current ? STICKY_PX : 0)) continue;
+            // Being inside a word's box beats being near one; then the nearest word wins.
+            const score = gap * 4 + Math.hypot(c.x - x, c.y - y) - (n === current ? 6 : 0);
+            if (score < bestScore) { best = n; bestScore = score; }
+        }
+        return best;
+    }, [view]);
+
+    /** Follows the pointer: snaps it, lights up the word it points at, and keeps frames coming for the morph. */
+    const trackPointer = useCallback((p: Point | null, snap = true) => {
+        pointer.current = p;
+        if (p) lastPointer.current = p;
+        const moving = !!motionRef.current;
+        const to = p && snap && !moving ? snapTarget(p.x, p.y) : null;
+        if (to !== pointerMorph.current.to) {
+            snapTo(to);
+            if (to && to.level !== 0) prefetchWord(to.id);
+        }
+        if (!moving) setHovered(to);
+        fgRef.current?.d3ReheatSimulation();
+    }, [snapTarget, snapTo]);
+
+    /** The word being pointed at, unless words are moving or have just moved under a pointer at rest. */
+    const activeHover = useCallback(() => (motionRef.current || pointerStill.current ? null : hovered), [hovered]);
+
     // ---- motion ----------------------------------------------------------------
     const readCamera = useCallback((): Camera | null => {
         const fg = fgRef.current;
@@ -1081,6 +1366,10 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
         const to = cameraFor(target.nodes, targets, sizeRef.current.width, sizeRef.current.height);
         const moves = planMoves(target.nodes, targets, statesOf(outgoing, motionRef.current, now));
         const newGraph = !outgoing || outgoing.nodes[0] !== target.nodes[0];
+        // The words are about to move: the pointer lets go of the one it held (that word kept the focus
+        // until now), and nothing lights up again until the pointer moves.
+        snapTo(null);
+        pointerStill.current = true;
         if (reducedMotion()) {
             stepMotion({ start: -Infinity, moves }, now);
             markShown(target);
@@ -1110,7 +1399,7 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
             applyCamera(to);
         }
         fg.d3ReheatSimulation();
-    }, [cameraNow, applyCamera]);
+    }, [cameraNow, applyCamera, snapTo]);
 
     // Runs once per view, as soon as the graph instance exists (its chunk loads lazily) and before the
     // first frame that draws it.
@@ -1181,7 +1470,7 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
         if (!fg || !view || !area) return;
         const now = performance.now();
         // A new graph's labels fade in with it, even when their words were already on screen.
-        const graphFade = reducedMotion() ? 1 : clamp01(spring(now - shownAt.current.pills) * 1.6);
+        const graphFade = reducedMotion() ? 1 : clamp01(spring(now - shownAt.current.pills) * ENTER_SPEED);
         const { x: ox, y: oy } = view.origin;
         for (const el of area.querySelectorAll<HTMLElement>('[data-pill]')) {
             const group = el.dataset.pill as RelationGroup;
@@ -1212,44 +1501,57 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
             el.style.opacity = String(Math.min(graphFade, Math.max(...members.map((n) => fadeIn(n.born, now)))));
             el.style.transform = `translate(${left}px, ${top}px)`;
         }
-        if (hovered && !motionRef.current && tooltipRef.current && hovered.x !== undefined) {
-            const p = fg.graph2ScreenCoords(hovered.x, hovered.y ?? 0);
-            tooltipRef.current.style.transform = `translate(${p.x}px, ${p.y - 18}px) translate(-50%, -100%)`;
+        const tip = tooltipRef.current;
+        const hov = activeHover();
+        if (tip) {
+            const at = hov && hov.x !== undefined ? fg.graph2ScreenCoords(hov.x, hov.y ?? 0) : null;
+            tip.style.visibility = at ? 'visible' : 'hidden';
+            if (at) tip.style.transform = `translate(${at.x}px, ${at.y - 18}px) translate(-50%, -100%)`;
         }
-    }, [view, hovered, size]);
+    }, [view, activeHover, size]);
 
     // ---- canvas painters -------------------------------------------------------
-    // Hover emphasis is eased per word and per link (keyed by id, so it carries across graphs).
     const ringAlpha = useCallback((id: string, now: number) => {
         const since = ringSince.current.get(id);
-        return since === undefined ? 0 : reducedMotion() ? 1 : clamp01(spring(now - since) * 1.6);
+        return since === undefined ? 0 : reducedMotion() ? 1 : clamp01(spring(now - since) * ENTER_SPEED);
     }, []);
 
-    /** How one word of the live graph is drawn this frame. */
+    /** How one word of the live graph is drawn this frame. Hover emphasis is animated per word (keyed by id, so it carries across graphs). */
     const livePaint = useCallback((node: AtlasNode, now: number) => {
-        // Words slide under a still pointer during a transition; reacting to that would flicker.
-        const hov = motionRef.current ? null : hovered;
+        const hov = activeHover();
         const isHovered = hov?.id === node.id;
         const near = !!hov && (isHovered || !!neighbours.get(hov.id)?.has(node.id));
+        // While the words move, hover emphasis lets go in step with them.
+        const response = motionRef.current ? SPRING_RESPONSE_MS : HOVER_RESPONSE_MS;
         const e = easing.current;
         return {
             shown: fadeIn(node.born, now),
-            emphasis: eased(e, `h:${node.id}`, isHovered ? 1 : 0, now),
-            dim: eased(e, `d:${node.id}`, hov && !near && node.level !== 0 ? 1 : 0, now),
-            near: eased(e, `n:${node.id}`, near ? 1 : 0, now),
+            emphasis: animated(e, `h:${node.id}`, isHovered ? 1 : 0, now, response),
+            dim: animated(e, `d:${node.id}`, hov && !near && node.level !== 0 ? 1 : 0, now, response),
+            near: animated(e, `n:${node.id}`, near ? 1 : 0, now, response),
+            lift: liftOf(node, now),
         };
-    }, [hovered, neighbours]);
+    }, [activeHover, neighbours, liftOf]);
 
-    /** Under the live graph: the previous view fading out, then the word-family bubble. */
+    /** The pointer, behind the words while it is (or is turning into) a highlight, on top of them as a dot. */
+    const drawPointer = useCallback((ctx: CanvasRenderingContext2D, now: number, layer: 'under' | 'over') => {
+        const m = pointerMorph.current;
+        const dot = !m.to && (reducedMotion() || now - m.at > 600);
+        if ((layer === 'over') !== dot) return;
+        const alpha = animated(easing.current, 'pointer', pointer.current ? 1 : 0, now, POINTER_RESPONSE_MS);
+        if (alpha > 0.01) paintPointer(ctx, pointerShape(now), alpha, palette);
+    }, [pointerShape, palette]);
+
+    /** Under the live graph: the previous view fading out, the word-family bubble, the pointer's highlight. */
     const paintUnderlay = useCallback((ctx: CanvasRenderingContext2D, scale: number) => {
         // A frame can draw the next view before any tick has run; start its transition first.
         settleView();
         const now = performance.now();
         const ghosts = ghostsRef.current;
-        const fade = ghosts && !reducedMotion() ? 1 - clamp01(spring(now - ghosts.at) * 1.6) : 0;
+        const fade = ghosts ? fadeOut(ghosts.at, now) : 0;
         if (ghosts && fade <= 0) ghostsRef.current = null;
         if (ghosts && fade > 0) {
-            // Departing words keep gliding where they were heading while they fade.
+            // Departing words keep gliding where they were heading and keep their emphasis while they fade.
             if (ghosts.motion) stepMotion(ghosts.motion, now);
             const live = new Map(view?.nodes.map((n) => [n.id, n]));
             const pointOf = (end: string | AtlasNode) => {
@@ -1262,7 +1564,7 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
                 if (!a || !b) continue;
                 const key = pairKey(l);
                 paintEdge(ctx, a, b, l, l.morph?.from, morphOf(l.morph, now), fade * fadeIn(l.born, now),
-                    eased(e, `l:${key}`, 0, now), eased(e, `L:${key}`, 0, now), palette, scale);
+                    held(e, `l:${key}`), held(e, `L:${key}`), palette, scale);
             }
             if (ghosts.bubble) {
                 ctx.save();
@@ -1274,46 +1576,52 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
                 if (n.x === undefined || n.y === undefined) continue;
                 paintWord(ctx, {
                     x: n.x, y: n.y, look: n, from: n.morph?.from, m: morphOf(n.morph, now),
-                    alpha: fade * fadeIn(n.born, now) * (1 - 0.65 * eased(e, `d:${n.id}`, 0, now)),
+                    alpha: fade * fadeIn(n.born, now) * (1 - 0.65 * held(e, `d:${n.id}`)),
                     grow: 0.6 + 0.4 * fade,
-                    emphasis: eased(e, `h:${n.id}`, 0, now),
+                    emphasis: held(e, `h:${n.id}`),
                     familiarity: familiarity[n.id],
                     ringAlpha: ringAlpha(n.id, now),
                 }, palette, scale);
             }
         }
 
-        if (!view?.family.length) return;
-        // The bubble belongs to the graph, not to its members: a new graph fades its bubble in,
-        // even when some members were already on screen.
-        ctx.save();
-        ctx.globalAlpha = reducedMotion() ? 1 : clamp01(spring(now - shownAt.current.bubble) * 1.6);
-        paintBubble(ctx, view.origin.x, view.origin.y, bubbleRadius(view), palette, scale);
-        ctx.restore();
-    }, [view, settleView, familiarity, ringAlpha, palette]);
+        if (view?.family.length) {
+            // The bubble belongs to the graph, not to its members: a new graph fades its bubble in,
+            // even when some members were already on screen.
+            ctx.save();
+            ctx.globalAlpha = reducedMotion() ? 1 : clamp01(spring(now - shownAt.current.bubble) * ENTER_SPEED);
+            paintBubble(ctx, view.origin.x, view.origin.y, bubbleRadius(view), palette, scale);
+            ctx.restore();
+        }
+        drawPointer(ctx, now, 'under');
+    }, [view, settleView, familiarity, ringAlpha, drawPointer, palette]);
 
     const paintLink = useCallback((link: AtlasLink, ctx: CanvasRenderingContext2D, scale: number) => {
         const s = link.source as AtlasNode, e = link.target as AtlasNode;
         if (s.x === undefined || s.y === undefined || e.x === undefined || e.y === undefined) return;
         const now = performance.now();
-        const hov = motionRef.current ? null : hovered;
+        const hov = activeHover();
         const lit = !!hov && (s.id === hov.id || e.id === hov.id);
+        const response = motionRef.current ? SPRING_RESPONSE_MS : HOVER_RESPONSE_MS;
         const key = pairKey(link);
+        const ls = liftOf(s, now), le = liftOf(e, now);
         paintEdge(
-            ctx, { x: s.x, y: s.y }, { x: e.x, y: e.y }, link, link.morph?.from, morphOf(link.morph, now),
+            ctx, { x: s.x + ls.x / scale, y: s.y + ls.y / scale }, { x: e.x + le.x / scale, y: e.y + le.y / scale },
+            link, link.morph?.from, morphOf(link.morph, now),
             Math.min(fadeIn(link.born, now), fadeIn(s.born, now), fadeIn(e.born, now)),
-            eased(easing.current, `l:${key}`, lit ? 1 : 0, now),
-            eased(easing.current, `L:${key}`, hov && !lit ? 1 : 0, now),
+            animated(easing.current, `l:${key}`, lit ? 1 : 0, now, response),
+            animated(easing.current, `L:${key}`, hov && !lit ? 1 : 0, now, response),
             palette, scale,
         );
-    }, [hovered, palette]);
+    }, [activeHover, liftOf, palette]);
 
     const paintNode = useCallback((node: AtlasNode, ctx: CanvasRenderingContext2D, scale: number) => {
         const now = performance.now();
         const live = livePaint(node, now);
         // Newcomers grow from 60% to full size while fading in; a word whose role changed morphs into it.
         paintWord(ctx, {
-            x: node.x ?? 0, y: node.y ?? 0, look: node, from: node.morph?.from, m: morphOf(node.morph, now),
+            x: (node.x ?? 0) + live.lift.x / scale, y: (node.y ?? 0) + live.lift.y / scale,
+            look: node, from: node.morph?.from, m: morphOf(node.morph, now),
             alpha: live.shown * (1 - 0.65 * live.dim),
             grow: 0.6 + 0.4 * live.shown,
             emphasis: live.emphasis,
@@ -1329,7 +1637,7 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
         const glossAlpha = clamp01((scale - 1.05) / 0.2);
         const outerAlpha = clamp01((scale - 1.3) / 0.2);
         const ghosts = ghostsRef.current;
-        const fade = ghosts && !reducedMotion() ? 1 - clamp01(spring(now - ghosts.at) * 1.6) : 0;
+        const fade = ghosts ? fadeOut(ghosts.at, now) : 0;
         if (ghosts && fade > 0) {
             const e = easing.current;
             for (const n of ghosts.nodes) {
@@ -1337,8 +1645,8 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
                 paintLabel(ctx, {
                     x: n.x, y: n.y, name: n.name, translation: n.translation,
                     look: n, from: n.morph?.from, m: morphOf(n.morph, now),
-                    alpha: fade * fadeIn(n.born, now) * (1 - 0.65 * eased(e, `d:${n.id}`, 0, now)),
-                    near: eased(e, `n:${n.id}`, 0, now), glossAlpha, outerAlpha,
+                    alpha: fade * fadeIn(n.born, now) * (1 - 0.65 * held(e, `d:${n.id}`)),
+                    near: held(e, `n:${n.id}`), glossAlpha, outerAlpha,
                 }, palette, scale);
             }
         }
@@ -1346,7 +1654,7 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
             if (node.x === undefined || node.y === undefined) continue;
             const live = livePaint(node, now);
             paintLabel(ctx, {
-                x: node.x, y: node.y, name: node.name, translation: node.translation,
+                x: node.x + live.lift.x / scale, y: node.y + live.lift.y / scale, name: node.name, translation: node.translation,
                 look: node, from: node.morph?.from, m: morphOf(node.morph, now),
                 alpha: live.shown * (1 - 0.65 * live.dim),
                 near: live.near, glossAlpha, outerAlpha,
@@ -1361,30 +1669,16 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
             }
             ctx.restore();
         }
-    }, [view, livePaint, palette]);
+        drawPointer(ctx, now, 'over');
+    }, [view, livePaint, drawPointer, palette]);
 
-    // ---- pointer ---------------------------------------------------------------
-    /** The word under a point on screen, from where words are drawn right now. */
-    const wordAt = (clientX: number, clientY: number): AtlasNode | null => {
-        const fg = fgRef.current, area = containerRef.current;
-        if (!fg || !area || !view) return null;
-        const box = area.getBoundingClientRect();
-        const p = fg.screen2GraphCoords(clientX - box.left, clientY - box.top);
-        let hit: AtlasNode | null = null, best = Infinity;
-        for (const n of view.nodes) {
-            if (n.x === undefined || n.y === undefined) continue;
-            const d = Math.hypot(n.x - p.x, n.y - p.y);
-            if (d <= radiusOf(n) + 5 && d < best) { hit = n; best = d; }
-        }
-        return hit;
-    };
-
-    const clickAt = (clientX: number, clientY: number) => {
-        const n = wordAt(clientX, clientY);
+    // ---- clicks ------------------------------------------------------------------
+    /** A click goes to the word the pointer has snapped to, or, mid-transition, to the word nearest to it. */
+    const clickAt = (x: number, y: number) => {
+        const n = pointerMorph.current.to ?? snapTarget(x, y);
         if (!n || n.level === 0) return;
         const p = fgRef.current?.graph2ScreenCoords(n.x ?? 0, n.y ?? 0);
         if (p) setPending({ word: n.id, x: p.x, y: p.y });
-        setHovered(null);
         onNodeClick?.(n.id);
     };
 
@@ -1452,31 +1746,35 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
 
             <div
                 ref={attachGraphArea}
-                className="relative min-h-0 flex-1"
+                // The canvas draws its own pointer (see "Pointer" above), so the system one hides over it.
+                className="relative min-h-0 flex-1 [&_canvas]:cursor-none"
                 // Hover and clicks are resolved here, from where words are drawn right now: force-graph
                 // hit-tests against a picture of the graph it refreshes only every 800 ms, which misses (or
                 // mistakes) words that are moving. Hover follows the pointer, never words sliding under it.
                 onPointerMove={(e) => {
-                    const hit = e.target instanceof HTMLCanvasElement ? wordAt(e.clientX, e.clientY) : null;
-                    if (hit !== pointerOver.current) {
-                        pointerOver.current = hit;
-                        if (hit && hit.level !== 0) prefetchWord(hit.id);
-                        if (containerRef.current) containerRef.current.style.cursor = hit && hit.level !== 0 ? 'pointer' : '';
-                    }
-                    if (!motionRef.current) setHovered(hit);
+                    pointerStill.current = false;
+                    const box = e.currentTarget.getBoundingClientRect();
+                    const p = { x: e.clientX - box.left, y: e.clientY - box.top };
+                    const from = pressedAt.current;
+                    if (from && Math.hypot(p.x - from.x, p.y - from.y) >= 5) dragging.current = true;
+                    // Over the pills and controls the system pointer takes over; touch has no pointer to draw.
+                    const onCanvas = e.target instanceof HTMLCanvasElement && e.pointerType !== 'touch';
+                    trackPointer(onCanvas ? p : null, !dragging.current);
                 }}
-                onPointerLeave={() => {
-                    pointerOver.current = null;
-                    setHovered(null);
-                }}
+                onPointerLeave={() => trackPointer(null)}
                 onPointerDown={(e) => {
-                    pressedAt.current = e.button === 0 && e.target instanceof HTMLCanvasElement ? { x: e.clientX, y: e.clientY } : null;
+                    const box = e.currentTarget.getBoundingClientRect();
+                    pressedAt.current = e.button === 0 && e.target instanceof HTMLCanvasElement ? { x: e.clientX - box.left, y: e.clientY - box.top } : null;
+                    dragging.current = false;
                 }}
                 onPointerUp={(e) => {
-                    const from = pressedAt.current;
+                    const from = pressedAt.current, dragged = dragging.current;
                     pressedAt.current = null;
+                    dragging.current = false;
                     // A click, not the end of a pan or a drag.
-                    if (from && Math.hypot(e.clientX - from.x, e.clientY - from.y) < 5) clickAt(e.clientX, e.clientY);
+                    if (!from || dragged) return;
+                    const box = e.currentTarget.getBoundingClientRect();
+                    clickAt(e.clientX - box.left, e.clientY - box.top);
                 }}
             >
                 {/* Graph */}
@@ -1506,8 +1804,11 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
                         cooldownTicks={90}
                         onZoom={({ k }: { k: number }) => {
                             showZoom(k);
-                            // The user is panning or zooming: let go of the camera.
-                            if (!cameraDriving.current) cameraRef.current = null;
+                            if (cameraDriving.current) return;
+                            // The user is panning or zooming: let go of the camera, and let the pointer
+                            // snap to whatever word comes under it.
+                            cameraRef.current = null;
+                            if (pointer.current && !dragging.current) trackPointer(pointer.current);
                         }}
                         onNodeDragEnd={(n: AtlasNode) => { if (n.level !== 0) { n.fx = n.x; n.fy = n.y; } }}
                     />
@@ -1601,7 +1902,7 @@ export default function PanelFissionGraph({ word, onNodeClick }: PanelFissionGra
 
                 {/* Hover tooltip */}
                 {showHoverTooltip && showGraphTooltip && hovered && !loading && (
-                    <div ref={tooltipRef} className="pointer-events-none absolute left-0 top-0 z-30">
+                    <div ref={tooltipRef} className="pointer-events-none absolute left-0 top-0 z-30" style={{ visibility: 'hidden' }}>
                         <WordTooltip word={hovered.name} phonetic={hovered.phonetic} translation={hovered.translation} />
                     </div>
                 )}
