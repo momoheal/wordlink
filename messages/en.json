@@ -262,6 +262,7 @@
     "showWordDetailTooltip": "Show Word Detail Tooltip",
     "showGraphTooltip": "Show Graph Tooltip",
     "showConnectionMeanings": "Show Connection Meanings",
+    "graphPointerSnap": "Magnetic Pointer in the Graph",
     "groupSize": "Group Size",
     "dashboardPageSize": "Dashboard Page Size",
     "aiEnabled": "Enable AI Features",
@@ -511,6 +512,8 @@
       "relayout": "Re-layout",
       "fit": "Fit to view",
       "zoom": "Zoom",
+      "snap": "Magnetic pointer: snaps to nearby words",
+      "back": "Back to {word}",
       "legend": {
         "title": "Familiarity",
         "new": "New",

@@ -273,7 +273,12 @@ function ThreeColumnLayoutContent() {
                     {/* Right Column: Fission Graph */}
                     <Panel defaultSize={35} minSize={25} className="bg-black relative">
                         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-neutral-900/20 via-black to-black pointer-events-none z-0" />
-                        <PanelFissionGraph word={selectedWord} onNodeClick={handleSelectWord} />
+                        <PanelFissionGraph
+                            word={selectedWord}
+                            onNodeClick={handleSelectWord}
+                            onBack={handleBack}
+                            backTo={currentIndex > 0 ? history[currentIndex - 1] : null}
+                        />
                     </Panel>
                 </PanelGroup>
             </div>

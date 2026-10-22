@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import type { ForceGraphMethods, ForceGraphProps, LinkObject, NodeObject } from 'react-force-graph-2d';
 import { forceCollide, forceManyBody, forceRadial, forceSimulation, forceX, forceY } from 'd3-force';
-import { Maximize, Minus, Plus, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Magnet, Maximize, Minus, Plus, RotateCcw } from 'lucide-react';
 import { useSettings } from '@/context/SettingsContext';
 import { useTheme, type Theme } from '@/context/ThemeContext';
 import WordTooltip from './WordTooltip';
@@ -38,6 +38,9 @@ interface PanelFissionGraphProps {
     /** "immersive" fills the screen behind floating windows: always dark, with floating controls. */
     variant?: 'panel' | 'immersive';
     inset?: Partial<Insets>;
+    /** Goes back to the previous word (`backTo`), so a word without neighbours is never a dead end. */
+    onBack?: () => void;
+    backTo?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1112,9 +1115,9 @@ function shortGloss(translation?: string): string {
     return parts.length > 14 ? `${parts.slice(0, 13)}…` : parts;
 }
 
-export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel', inset }: PanelFissionGraphProps) {
+export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel', inset, onBack, backTo }: PanelFissionGraphProps) {
     const t = useTranslations('graph');
-    const { showHoverTooltip, showGraphTooltip } = useSettings();
+    const { showHoverTooltip, showGraphTooltip, graphPointerSnap: snapping, updateSettings } = useSettings();
     const { theme } = useTheme();
     const immersive = variant === 'immersive';
     const palette = PALETTE[immersive ? 'dark' : theme];
@@ -1281,7 +1284,7 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
     const liftOf = useCallback((n: AtlasNode, now: number): Point => {
         const fg = fgRef.current, p = pointer.current;
         let tx = 0, ty = 0;
-        if (fg && p && n === pointerMorph.current.to && n.x !== undefined && n.y !== undefined) {
+        if (snapping && fg && p && n === pointerMorph.current.to && n.x !== undefined && n.y !== undefined) {
             const c = fg.graph2ScreenCoords(n.x, n.y);
             const dx = (p.x - c.x) * 0.15, dy = (p.y - c.y) * 0.15;
             const shrink = Math.min(1, LIFT_PX / (Math.hypot(dx, dy) || 1));
@@ -1290,7 +1293,7 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
         }
         const e = easing.current;
         return { x: animated(e, `lx:${n.id}`, tx, now, POINTER_RESPONSE_MS), y: animated(e, `ly:${n.id}`, ty, now, POINTER_RESPONSE_MS) };
-    }, []);
+    }, [snapping]);
 
     /** The highlight behind a snapped word, or the dot under the pointer. */
     const pointerTarget = useCallback((to: AtlasNode | null, now: number): PointerShape => {
@@ -1313,7 +1316,10 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
         pointerMorph.current = { from: pointerShape(now), to, at: now };
     }, [pointerShape]);
 
-    /** The word a pointer at (x, y) snaps to: the closest within reach, the current one keeping ties. */
+    /**
+     * The word a pointer at (x, y) points at: with snapping, the closest within reach of the word or its
+     * label (the current one keeping ties); without, only a word right under it.
+     */
     const snapTarget = useCallback((x: number, y: number): AtlasNode | null => {
         const fg = fgRef.current;
         if (!fg || !view) return null;
@@ -1323,6 +1329,11 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
         for (const n of view.nodes) {
             if (n.x === undefined || n.y === undefined) continue;
             const c = fg.graph2ScreenCoords(n.x, n.y);
+            if (!snapping) {
+                const d = Math.hypot(c.x - x, c.y - y);
+                if (d <= radiusFor(n, 0) * k + 4 && d < bestScore) { best = n; bestScore = d; }
+                continue;
+            }
             const gap = gapTo(wordBox(n, c, k), x, y);
             if (gap > MAGNET_PX + (n === current ? STICKY_PX : 0)) continue;
             // Being inside a word's box beats being near one; then the nearest word wins.
@@ -1330,7 +1341,7 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
             if (score < bestScore) { best = n; bestScore = score; }
         }
         return best;
-    }, [view]);
+    }, [view, snapping]);
 
     /** Follows the pointer: snaps it, lights up the word it points at, and keeps frames coming for the morph. */
     const trackPointer = useCallback((p: Point | null, snap = true) => {
@@ -1342,9 +1353,11 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
             snapTo(to);
             if (to && to.level !== 0) prefetchWord(to.id);
         }
+        // Without snapping the system pointer stays, as a hand over words that can be clicked.
+        if (containerRef.current) containerRef.current.style.cursor = !snapping && to && to.level !== 0 ? 'pointer' : '';
         if (!moving) setHovered(to);
         fgRef.current?.d3ReheatSimulation();
-    }, [snapTarget, snapTo]);
+    }, [snapTarget, snapTo, snapping]);
 
     /** The word being pointed at, unless words are moving or have just moved under a pointer at rest. */
     const activeHover = useCallback(() => (motionRef.current || pointerStill.current ? null : hovered), [hovered]);
@@ -1534,6 +1547,16 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
             el.style.opacity = String(Math.min(graphFade, Math.max(...members.map((n) => fadeIn(n.born, now)))));
             el.style.transform = `translate(${left}px, ${top}px)`;
         }
+        const empty = area.querySelector<HTMLElement>('[data-empty]');
+        const center = view.nodes[0];
+        if (empty && center.x !== undefined && center.y !== undefined) {
+            const c = fg.graph2ScreenCoords(center.x, center.y);
+            const box = wordBox(center, c, fg.zoom());
+            // Clear of the word, its label and the gloss line under the label.
+            empty.style.transform = `translate(${c.x}px, ${box.y + box.h + 30}px) translate(-50%, 0)`;
+            empty.style.opacity = String(graphFade);
+            empty.style.visibility = 'visible';
+        }
         const tip = tooltipRef.current;
         const hov = activeHover();
         if (tip) {
@@ -1568,12 +1591,13 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
 
     /** The pointer, behind the words while it is (or is turning into) a highlight, on top of them as a dot. */
     const drawPointer = useCallback((ctx: CanvasRenderingContext2D, now: number, layer: 'under' | 'over') => {
+        if (!snapping) return;
         const m = pointerMorph.current;
         const dot = !m.to && (reducedMotion() || now - m.at > 600);
         if ((layer === 'over') !== dot) return;
         const alpha = animated(easing.current, 'pointer', pointer.current ? 1 : 0, now, POINTER_RESPONSE_MS);
         if (alpha > 0.01) paintPointer(ctx, pointerShape(now), alpha, palette);
-    }, [pointerShape, palette]);
+    }, [snapping, pointerShape, palette]);
 
     /** Under the live graph: the previous view fading out, the word-family bubble, the pointer's highlight. */
     const paintUnderlay = useCallback((ctx: CanvasRenderingContext2D, scale: number) => {
@@ -1706,9 +1730,9 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
     }, [view, livePaint, drawPointer, palette]);
 
     // ---- clicks ------------------------------------------------------------------
-    /** A click goes to the word the pointer has snapped to, or, mid-transition, to the word nearest to it. */
+    /** A click goes to the word the pointer has snapped to, or else to the word it is on. */
     const clickAt = (x: number, y: number) => {
-        const n = pointerMorph.current.to ?? snapTarget(x, y);
+        const n = (snapping ? pointerMorph.current.to : null) ?? snapTarget(x, y);
         if (!n || n.level === 0) return;
         const p = fgRef.current?.graph2ScreenCoords(n.x ?? 0, n.y ?? 0);
         if (p) setPending({ word: n.id, x: p.x, y: p.y });
@@ -1735,13 +1759,26 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
                     ? 'absolute left-5 top-5 z-20 flex max-w-[min(46rem,calc(100%-2.5rem))] flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-neutral-800 bg-neutral-950/80 px-3 py-2 shadow-2xl backdrop-blur-md'
                     : 'z-20 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-neutral-800 bg-neutral-950/85 px-3 py-2 backdrop-blur-md'}
             >
-                <div className="min-w-0">
-                    <div className="text-[9px] font-bold uppercase tracking-[0.24em] text-emerald-400">{t('atlas.eyebrow')}</div>
-                    <div className="flex items-baseline gap-2">
-                        <span className="truncate text-lg leading-tight text-white" style={{ fontFamily: "'Instrument Serif', serif" }}>{word}</span>
-                        {loading
-                            ? <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" aria-label={t('loadingGraph')} />
-                            : atlas && <span className="whitespace-nowrap text-[11px] text-neutral-500">{t('atlas.stats', { shown: shownWords, total: totalWords })}</span>}
+                <div className="flex min-w-0 items-center gap-2">
+                    {onBack && backTo && (
+                        <button
+                            type="button"
+                            onClick={onBack}
+                            title={t('atlas.back', { word: backTo })}
+                            aria-label={t('atlas.back', { word: backTo })}
+                            className="-ml-1 rounded-md p-1 text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-white"
+                        >
+                            <ArrowLeft size={16} />
+                        </button>
+                    )}
+                    <div className="min-w-0">
+                        <div className="text-[9px] font-bold uppercase tracking-[0.24em] text-emerald-400">{t('atlas.eyebrow')}</div>
+                        <div className="flex items-baseline gap-2">
+                            <span className="truncate text-lg leading-tight text-white" style={{ fontFamily: "'Instrument Serif', serif" }}>{word}</span>
+                            {loading
+                                ? <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" aria-label={t('loadingGraph')} />
+                                : atlas && <span className="whitespace-nowrap text-[11px] text-neutral-500">{t('atlas.stats', { shown: shownWords, total: totalWords })}</span>}
+                        </div>
                     </div>
                 </div>
                 <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
@@ -1784,8 +1821,8 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
 
             <div
                 ref={attachGraphArea}
-                // The canvas draws its own pointer (see "Pointer" above), so the system one hides over it.
-                className={`${immersive ? 'absolute inset-0' : 'relative min-h-0 flex-1'} [&_canvas]:cursor-none`}
+                // With snapping on, the canvas draws its own pointer (see "Pointer" above), so the system one hides over it.
+                className={`${immersive ? 'absolute inset-0' : 'relative min-h-0 flex-1'} ${snapping ? '[&_canvas]:cursor-none' : ''}`}
                 // Hover and clicks are resolved here, from where words are drawn right now: force-graph
                 // hit-tests against a picture of the graph it refreshes only every 800 ms, which misses (or
                 // mistakes) words that are moving. Hover follows the pointer, never words sliding under it.
@@ -1893,8 +1930,21 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
                         style={{ left: pending.x, top: pending.y }}
                     />
                 )}
-                {!loading && view && view.nodes.length <= 1 && (
-                    <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-neutral-500">{t('atlas.empty')}</div>
+                {/* A word without neighbours: say so under it, with the way back (placed each frame) */}
+                {!loading && atlas && atlas.nodes.length <= 1 && (
+                    <div data-empty className="absolute left-0 top-0 z-10 flex w-max max-w-72 flex-col items-center gap-3 text-center" style={{ visibility: 'hidden' }}>
+                        <p className="text-sm text-neutral-500">{t('atlas.empty')}</p>
+                        {onBack && backTo && (
+                            <button
+                                type="button"
+                                onClick={onBack}
+                                className="inline-flex items-center gap-1.5 rounded-full border border-neutral-700 bg-neutral-950/80 px-3 py-1.5 text-xs text-neutral-200 transition-colors hover:border-neutral-500 hover:bg-neutral-900"
+                            >
+                                <ArrowLeft size={13} />
+                                {t('atlas.back', { word: backTo })}
+                            </button>
+                        )}
+                    </div>
                 )}
 
                 {/* Familiarity legend and zoom bar: at the two bottom corners of a panel; together at the
@@ -1936,6 +1986,16 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
                         />
                         <button type="button" onClick={() => zoomBy(1.25)} title={t('zoomIn')} aria-label={t('zoomIn')} className="rounded p-1 hover:bg-neutral-800 hover:text-white"><Plus size={14} /></button>
                         <span ref={zoomLabelRef} className="w-9 text-center text-[10px] tabular-nums">100%</span>
+                        <button
+                            type="button"
+                            aria-pressed={snapping}
+                            onClick={() => updateSettings({ graphPointerSnap: !snapping })}
+                            title={t('atlas.snap')}
+                            aria-label={t('atlas.snap')}
+                            className={`rounded p-1 hover:bg-neutral-800 ${snapping ? 'text-emerald-400 hover:text-emerald-300' : 'hover:text-white'}`}
+                        >
+                            <Magnet size={14} />
+                        </button>
                         <button type="button" onClick={() => fit()} title={t('atlas.fit')} aria-label={t('atlas.fit')} className="rounded p-1 hover:bg-neutral-800 hover:text-white"><Maximize size={14} /></button>
                         <button type="button" onClick={relayout} title={t('atlas.relayout')} aria-label={t('atlas.relayout')} className="rounded p-1 hover:bg-neutral-800 hover:text-white"><RotateCcw size={14} /></button>
                     </div>

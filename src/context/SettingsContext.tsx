@@ -31,6 +31,8 @@ interface Settings {
     showWordDetailTooltip: boolean;
     showGraphTooltip: boolean;
     showConnectionMeanings: boolean;
+    /** The word graph's pointer snaps to nearby words, iPad style. */
+    graphPointerSnap: boolean;
     // Pronunciation & YouTube
     preferredAccent: PreferredAccent;
     youtubeMode: YouTubeMode;
@@ -75,6 +77,7 @@ const defaultSettings: Settings = {
     showWordDetailTooltip: true,
     showGraphTooltip: true,
     showConnectionMeanings: false,
+    graphPointerSnap: true,
     // Pronunciation & YouTube
     preferredAccent: 'us' as PreferredAccent,
     youtubeMode: 'audio' as YouTubeMode,

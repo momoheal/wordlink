@@ -262,6 +262,7 @@
     "showWordDetailTooltip": "显示单词详情提示",
     "showGraphTooltip": "显示图表提示",
     "showConnectionMeanings": "显示连接含义",
+    "graphPointerSnap": "图谱指针吸附",
     "groupSize": "分组大小",
     "dashboardPageSize": "面板每页显示",
     "aiEnabled": "启用 AI 功能",
@@ -511,6 +512,8 @@
       "relayout": "重新布局",
       "fit": "适应窗口",
       "zoom": "缩放",
+      "snap": "吸附指针：靠近单词时自动吸附",
+      "back": "返回 {word}",
       "legend": {
         "title": "熟悉度",
         "new": "未学",

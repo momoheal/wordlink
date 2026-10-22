@@ -13,7 +13,7 @@ import FullscreenButton from './FullscreenButton';
 
 export default function SettingsContent() {
     const t = useTranslations();
-    const { groupSize, showChinese, showScore, showHoverTooltip, showWordDetailTooltip, showGraphTooltip, showConnectionMeanings, shortcuts, layoutMode, preferredAccent, youtubeMode, youtubeAccent, updateSettings, resetShortcuts } = useSettings();
+    const { groupSize, showChinese, showScore, showHoverTooltip, showWordDetailTooltip, showGraphTooltip, showConnectionMeanings, graphPointerSnap, shortcuts, layoutMode, preferredAccent, youtubeMode, youtubeAccent, updateSettings, resetShortcuts } = useSettings();
     const { theme, setTheme } = useTheme();
     const deviceType = useDeviceType();
     const isTablet = deviceType === 'tablet';
@@ -221,6 +221,21 @@ export default function SettingsContent() {
                                                         className="toggle-checkbox absolute block w-4 h-4 mt-1 ml-1 bg-white rounded-full appearance-none cursor-pointer transition-transform duration-200 ease-in-out checked:translate-x-4"
                                                     />
                                                     <div className={`toggle-label block overflow-hidden h-6 rounded-full cursor-pointer transition-colors duration-200 ${showGraphTooltip ? 'bg-blue-600' : 'bg-neutral-700'}`}></div>
+                                                </div>
+                                            </label>
+
+                                            <label className="flex items-center justify-between cursor-pointer group">
+                                                <span className="text-xs font-medium text-neutral-400 group-hover:text-white transition-colors">
+                                                    {t('settings.graphPointerSnap')}
+                                                </span>
+                                                <div className="relative inline-block w-10 h-6 align-middle select-none transition duration-200 ease-in">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={graphPointerSnap}
+                                                        onChange={(e) => updateSettings({ graphPointerSnap: e.target.checked })}
+                                                        className="toggle-checkbox absolute block w-4 h-4 mt-1 ml-1 bg-white rounded-full appearance-none cursor-pointer transition-transform duration-200 ease-in-out checked:translate-x-4"
+                                                    />
+                                                    <div className={`toggle-label block overflow-hidden h-6 rounded-full cursor-pointer transition-colors duration-200 ${graphPointerSnap ? 'bg-blue-600' : 'bg-neutral-700'}`}></div>
                                                 </div>
                                             </label>
 

@@ -28,6 +28,9 @@ export default function ReaderSideDrawer({
     const t = useTranslations('reader.drawer');
     const tp = useTranslations('paywall');
     const [word, setWord] = useState<string | undefined>(initialWord);
+    // Words left behind in the graph since the drawer opened on `initialWord`, for going back.
+    const [trail, setTrail] = useState<{ start?: string; words: string[] }>({ start: initialWord, words: [] });
+    const steps = trail.start === initialWord ? trail.words : [];
     const [tab, setTab] = useState<'fission' | 'grammar' | 'ai'>('fission');
     const [wordData, setWordData] = useState<WordDetails | null>(null);
     const [loadingWord, setLoadingWord] = useState(false);
@@ -315,8 +318,15 @@ export default function ReaderSideDrawer({
                                         <PanelFissionGraph
                                             word={word}
                                             onNodeClick={(nextWord) => {
-                                                if (nextWord) setWord(nextWord);
+                                                if (!nextWord) return;
+                                                if (word) setTrail({ start: initialWord, words: [...steps, word] });
+                                                setWord(nextWord);
                                             }}
+                                            onBack={() => {
+                                                setWord(steps[steps.length - 1]);
+                                                setTrail({ start: initialWord, words: steps.slice(0, -1) });
+                                            }}
+                                            backTo={steps[steps.length - 1] ?? null}
                                         />
                                     </div>
                                 </div>
