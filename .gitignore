@@ -86,6 +86,9 @@ scripts/test-prod-registration.ts
 DEPLOYMENT_INSTRUCTIONS.md
 supabase/config.toml
 
+# 一次性调试 / 运维 / 录屏脚本（仅本地使用，见 scripts/local/README.md）
+scripts/local/
+
 # 比赛报名表单 / 邮箱自动化脚本（仅本地使用）
 scripts/form-*.cjs
 scripts/qqmail-*.cjs

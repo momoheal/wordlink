@@ -1,133 +1,68 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for coding agents working in this repository.
 
-## Project Overview
+## What this is
 
-LPT英语单词裂变 (English Word Fission) is a Next.js-based English vocabulary learning platform that visualizes word relationships through an interactive graph interface. The application uses a "word fission" concept to show etymological connections and related words, helping users learn vocabulary through visual associations.
+**WordLink** (product name on the site: *Lexiverse*) is an English vocabulary learning app built around a
+**word-relation graph**: every word links to its synonyms, near-synonyms, antonyms, derivatives, inflections and
+look-alike spellings, and learners explore vocabulary as a network instead of a flat list. Around the graph sit
+quizzes driven by an FSRS-6 memory model, graded reading, an ambient "screensaver" mode, AI tutoring and a
+learning passport.
 
-## Tech Stack
+## Stack
 
-- **Framework**: Next.js 16 (App Router)
-- **Language**: TypeScript
-- **Database**: PostgreSQL with Prisma ORM
-- **UI**: React 19, Tailwind CSS 4
-- **Visualization**: react-force-graph-2d, d3-force
-- **Authentication**: JWT with bcryptjs
-- **AI Integration**: DeepSeek API for chat features
+- Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4
+- PostgreSQL + Prisma (all tables live in the `LPT_english` schema)
+- Supabase Auth (`src/lib/supabase/*`); `DEMO_MODE=true` maps every session to the built-in demo account
+- LLM calls go through one OpenAI-compatible gateway, `src/lib/ai/gateway.ts` (SiliconFlow by default,
+  `LLM_BASE_URL` / `LLM_MODEL`); prompts live in `data/ai_prompts/`, results are cached on disk in `data/generated/`
+- next-intl: `messages/<locale>.json` plus per-area shards in `messages/<locale>/*.json`, locale from the
+  `NEXT_LOCALE` cookie, English by default
+- Graph rendering: `react-force-graph-2d` + `d3-force`
+- Payments: Alipay page pay (`src/lib/pay/`), free-tier daily quotas (`src/lib/quota.ts`)
 
-## Development Commands
+## Commands
 
 ```bash
-# Development server (runs on port 3000)
-npm run dev
-
-# Production build
-npm run build
-
-# Start production server (runs on port 3011)
-npm start
-
-# Linting
+docker compose up -d     # local PostgreSQL on :5432
+npm run dev              # http://localhost:3000
+npm run typecheck        # tsc --noEmit
 npm run lint
-
-# Database operations
-npx prisma generate    # Generate Prisma client
-npx prisma migrate dev # Run migrations in development
-npx prisma studio      # Open Prisma Studio GUI
+npm run build
+npx prisma generate      # after editing prisma/schema.prisma
+npx prisma migrate dev
+npm run import-edges     # load data/word_relation_edges.csv into word_relation
+npm run demo-data        # 180 days of learning data for demo@wordlink.test
 ```
 
-## Architecture
+`dev` and `build` pass `--webpack` on purpose: Turbopack panics when the project path contains non-ASCII
+characters. Do not switch them back unless the checkout lives under an ASCII-only path.
 
-### Directory Structure
+`.env.local` overrides `.env` — when changing `DATABASE_URL`, change both. See `.env.example` for every variable.
 
-- `src/app/` - Next.js App Router pages and API routes
-  - `api/` - RESTful API endpoints organized by feature
-  - `dashboard/`, `quiz/`, `history/`, `admin/` - Main application pages
-- `src/components/` - React components
-  - `ai/` - AI chat components (AIFloatingBall, AIChatWindow, AIProvider)
-  - Core components: ThreeColumnLayout, FissionGraph, WordDetail, WordList
-- `src/lib/` - Utility libraries
-  - `data.ts` - Word data loading and graph generation
-  - `auth.ts`, `jwt.ts` - Authentication utilities
-  - `prisma.ts` - Prisma client singleton
-- `src/context/` - React contexts (SettingsContext)
-- `prisma/` - Database schema and migrations
-- `data/` - Static data files
-  - `word_text_database/word_database/` - Individual word markdown files
-  - `word_library/` - Categorized word lists
-  - `word_fission_data.csv` - Word relationship data
-  - `ecdict_extracted.csv` - Dictionary data (phonetics, definitions)
-  - `ai_prompts/` - AI system prompts
+## Layout
 
-### Core Features
+- `src/app/` — pages and `api/` route handlers
+  - `/` landing · `/study` main workspace (word list | word detail | graph) · `/home` daily dashboard
+  - `/quiz/*` select / spelling / recall · `/read` graded reading · `/ambient` screensaver mode
+  - `/immersive` full-screen graph · `/passport` learning report · `/navigator` graph path-finding toward a target word
+  - `/my-libraries` custom word books · `/pricing`, `/pay/return` payments · `/model` model tech report
+- `src/components/` — UI. Workspace: `ThreeColumnLayout`, `WordList`, `WordDetail`, `PanelFissionGraph`
+  (graph inside the workspace) and `FissionGraph` (full-screen graph). `word-modules/` are the collapsible
+  blocks of the word detail pane; `mobile/` holds the phone layouts.
+- `src/lib/data.ts` — word data access: libraries, word details, Chinese data, `getFissionData()` (graph)
+- `src/lib/graph-shared.ts` — graph types and relation colors, safe to import from client components
+- `src/lib/reader-engine/` — FSRS-6 scheduler, tokenizer, article recommender
+- `prisma/schema.prisma` — data model; `word_relation` holds the typed graph edges
+- `data/` — lexical data (ECDICT extract, word markdown, Chinese explanations, relation edges, word lists)
+- `model_training/` — SFT / DPO / benchmark scripts for the WordLink-Edge 1.5B model; results in `outputs/eval/`
+- `scripts/` — data import and demo/recording tools; `scripts/local/` is git-ignored scratch space
 
-1. **Three-Column Layout**: Main interface with resizable panels
-   - Left: Word list with search and filtering
-   - Center: Interactive force-directed graph visualization
-   - Right: Detailed word information with etymology and examples
+## Conventions
 
-2. **Word Fission Graph**: Visualizes word relationships using D3 force simulation
-   - Nodes represent words (sized by importance)
-   - Links show etymological connections
-   - Interactive navigation through word families
-
-3. **Quiz System**: Three quiz types
-   - Spelling: Type the word from audio/definition
-   - Recall: Rate familiarity (Unknown/Hard/Easy)
-   - Select: Multiple choice questions
-
-4. **User System**:
-   - JWT-based authentication with httpOnly cookies
-   - User progress tracking (visits, quiz records)
-   - Study plans with daily goals
-   - Word notes with social interactions (likes, favorites, comments)
-
-5. **AI Chat**: Context-aware vocabulary tutoring
-   - Three chat categories: single word, word group, general
-   - Uses DeepSeek API with custom prompts from `data/ai_prompts/`
-   - Session-based conversation history
-
-### Data Flow
-
-1. **Word Data Loading** (`src/lib/data.ts`):
-   - Reads CSV files for word relationships and dictionary data
-   - Generates graph structures with nodes and links
-   - Caches data for performance
-
-2. **API Routes**: Follow RESTful patterns
-   - `/api/fission?word=X` - Get word graph data
-   - `/api/words` - List all words
-   - `/api/words/[word]` - Get specific word details
-   - `/api/auth/*` - Authentication endpoints
-   - `/api/user/*` - User data and progress
-   - `/api/quiz/*` - Quiz functionality
-   - `/api/ai/*` - AI chat endpoints
-   - `/api/notes/*` - Word notes CRUD
-
-3. **Authentication Flow**:
-   - Middleware (`src/middleware.ts`) protects all routes except public paths
-   - JWT tokens stored in httpOnly cookies
-   - API routes handle their own auth checks
-   - Admin routes require special admin key validation
-
-### Database Schema
-
-Key models:
-- `User` - User accounts with secretKey for registration
-- `WordVisit` - Tracks word views for analytics
-- `QuizRecord` - Stores quiz results (testType: 1=Spelling, 2=Recall)
-- `StudyPlan` - User daily goals
-- `WordNote` - User-created word notes
-- `NoteInteraction` - Social features (likes, favorites, comments)
-- `ChatSession` - AI chat sessions with category (1=word, 2=word group, 3=other)
-- `ChatMessage` - Chat message history
-
-## Important Notes
-
-- The application uses a shared PostgreSQL database for both development and production
-- Environment variables are in `.env` (not committed to git)
-- Word data files are in markdown format in `data/word_text_database/word_database/`
-- The production server runs on port 3011 (configured in package.json)
-- All user-facing pages require authentication except `/login`
-- The app uses Chinese for UI text (user context is Chinese-speaking learners)
+- UI copy goes through next-intl; add keys to both `messages/en*` and `messages/zh*`.
+- Server-only modules (`fs`, Prisma) must not be imported from client components; shared graph types belong
+  in `graph-shared.ts`.
+- Never commit `.env*`, server addresses or credentials. Ops scripts that need them stay in `scripts/local/`.
+- Numbers quoted in docs or UI about the model must come from `outputs/eval/`.
