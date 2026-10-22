@@ -9,10 +9,15 @@ import WordTooltip from './WordTooltip';
 import { RefreshCw, Maximize2, Settings2, Eye, EyeOff, ZoomIn, ZoomOut, Settings, X } from 'lucide-react';
 import { forceCollide } from 'd3-force';
 
+function GraphLoadingFallback() {
+    const t = useTranslations('graph');
+    return <div className="text-neutral-400">{t('loadingGraph')}</div>;
+}
+
 // Dynamically import ForceGraph2D with no SSR
 const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), {
     ssr: false,
-    loading: () => <div className="text-neutral-400">Loading graph...</div>
+    loading: () => <GraphLoadingFallback />
 });
 
 interface FissionGraphProps {

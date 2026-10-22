@@ -44,6 +44,7 @@ export async function GET(
     const groupIndex = searchParams.get('groupIndex');
     const groupSize = searchParams.get('groupSize');
     const includeDefinitions = searchParams.get('includeDefinitions') === 'true';
+    const slim = searchParams.get('slim') === 'true' || searchParams.get('slim') === '1';
 
     let query: any = {
       where: { libraryId: id },
@@ -69,13 +70,13 @@ export async function GET(
         session.id,
         undefined,
         undefined,
-        { words }
+        { words, slim }
       );
       const response = NextResponse.json({ words: enrichedWords });
       return addCorsHeaders(response, origin);
     }
 
-    const response = NextResponse.json({ words });
+    const response = NextResponse.json({ words, slim });
     return addCorsHeaders(response, origin);
   } catch (error) {
     console.error('Error fetching words:', error);

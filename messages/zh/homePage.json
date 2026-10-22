@@ -69,8 +69,10 @@
     },
     "passport": {
       "title": "你的语境正在生长。",
-      "desc": "打开学习护照，查看你的认知雷达与成长轨迹。"
-    }
+      "desc": "打开学习护照，查看你的认知雷达与成长轨迹。",
+      "badge": "学习护照"
+    },
+    "eyebrow": "任务控制台"
   },
   "mobile": {
     "tabs": {
@@ -82,7 +84,13 @@
     },
     "startQuiz": "开始测验",
     "showNav": "显示导航栏",
-    "hideNav": "隐藏导航栏"
+    "hideNav": "隐藏导航栏",
+    "filters": "筛选",
+    "wordListLabel": "词表",
+    "wordCount": "{count} 个单词",
+    "cancelSelection": "取消选择",
+    "askAiSelected": "向 AI 询问选中单词",
+    "startQuizSelected": "用选中单词开始测验"
   },
   "backToHome": {
     "label": "返回主页",

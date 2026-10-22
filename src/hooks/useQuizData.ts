@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
 
 export interface QuizWord {
     word: string;
@@ -18,6 +19,7 @@ interface UseQuizDataParams {
 }
 
 export function useQuizData({ source, libraryPath, groupIndex, groupSize = 10, count = 10 }: UseQuizDataParams) {
+    const t = useTranslations('quizPages.common');
     const [words, setWords] = useState<QuizWord[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -39,12 +41,12 @@ export function useQuizData({ source, libraryPath, groupIndex, groupSize = 10, c
                 const res = await fetch(`/api/quiz/unfamiliar?count=${count * 2}`); // Fetch more for unfamiliar
                 quizWords = await res.json();
                 if (quizWords.length === 0) {
-                    setError('No unfamiliar words found! Great job!');
+                    setError(t('noUnfamiliar'));
                 }
             } else if (source === 'custom') {
                 const customWordsJson = sessionStorage.getItem('customQuizWords');
                 if (!customWordsJson) {
-                    setError('No words selected for custom quiz.');
+                    setError(t('noCustomWords'));
                     setLoading(false);
                     return;
                 }
@@ -73,11 +75,11 @@ export function useQuizData({ source, libraryPath, groupIndex, groupSize = 10, c
             setWords(quizWords);
         } catch (err) {
             console.error('Failed to fetch quiz data:', err);
-            setError('Failed to load quiz data. Please try again.');
+            setError(t('loadFailed'));
         } finally {
             setLoading(false);
         }
-    }, [source, libraryPath, groupIndex, groupSize, count]);
+    }, [source, libraryPath, groupIndex, groupSize, count, t]);
 
     useEffect(() => {
         fetchWords();

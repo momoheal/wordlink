@@ -67,11 +67,11 @@ const DEFAULT_AMBIENT_CONFIG: AmbientConfig = {
  *   - 浮层淡入淡出 cubic-bezier(0.4,0,0.2,1)
  * ============================================================ */
 
-const SEASONS: Array<{ id: SeasonId; emoji: string; label: string }> = [
-    { id: 'spring', emoji: '🌸', label: 'Spring' },
-    { id: 'summer', emoji: '✨', label: 'Summer' },
-    { id: 'autumn', emoji: '🍁', label: 'Autumn' },
-    { id: 'winter', emoji: '❄️', label: 'Winter' },
+const SEASONS: Array<{ id: SeasonId; emoji: string }> = [
+    { id: 'spring', emoji: '🌸' },
+    { id: 'summer', emoji: '✨' },
+    { id: 'autumn', emoji: '🍁' },
+    { id: 'winter', emoji: '❄️' },
 ];
 
 const SPEAK_WORD_AT_MS = 1800;
@@ -92,7 +92,7 @@ async function loadWordCards(cfg: AmbientConfig): Promise<AmbientWordCard[]> {
     try {
         if (cfg.path) {
             const res = await fetch(
-                `/api/library-words?path=${encodeURIComponent(cfg.path)}&groupIndex=${cfg.groupIndex}&groupSize=${cfg.groupSize}&includeDefinitions=true`,
+                `/api/library-words?path=${encodeURIComponent(cfg.path)}&groupIndex=${cfg.groupIndex}&groupSize=${cfg.groupSize}&includeDefinitions=true&slim=1`,
             );
             if (res.ok) {
                 const data: unknown = await res.json();
@@ -621,7 +621,7 @@ export default function AmbientScreen() {
                             <button
                                 key={sn.id}
                                 type="button"
-                                title={sn.label}
+                                title={t(`seasons.${sn.id}`)}
                                 onClick={() => switchSeason(i)}
                                 className={`flex h-8 w-8 items-center justify-center rounded-full text-sm transition-all duration-300 ease-in-out ${
                                     i === seasonIdx ? 'scale-110 bg-white/20' : 'opacity-55 hover:opacity-90'

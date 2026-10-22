@@ -41,6 +41,13 @@ export interface SessionUser {
     email: string;
     role: string;
     preferredLanguage?: string;
+    plan: string;
+    planExpiresAt: Date | null;
+}
+
+/** Pro 判定：plan==='pro' 且未过期；planExpiresAt 为 null 视为永久（演示账号） */
+export function isPro(user: Pick<SessionUser, 'plan' | 'planExpiresAt'> | null | undefined): boolean {
+    return !!user && user.plan === 'pro' && (user.planExpiresAt == null || user.planExpiresAt > new Date());
 }
 
 type SupabaseUserLike = {
@@ -61,6 +68,8 @@ function sessionFromSupabaseUser(user: SupabaseUserLike): SessionUser | null {
         preferredLanguage: typeof metadata.preferredLanguage === 'string'
             ? metadata.preferredLanguage
             : 'zh',
+        plan: 'free',
+        planExpiresAt: null,
     };
 }
 
@@ -72,6 +81,9 @@ export const DEMO_ACCOUNT: SessionUser = {
     email: 'demo@wordlink.test',
     role: 'user',
     preferredLanguage: 'zh',
+    // 演示账号直接给 Pro 且永不过期，展会/评审环境不受付费墙影响
+    plan: 'pro',
+    planExpiresAt: null,
 };
 
 export async function getSession(): Promise<SessionUser | null> {
@@ -107,14 +119,14 @@ export async function getSession(): Promise<SessionUser | null> {
 
         let profile = await prisma.user.findUnique({
             where: { id: session.id },
-            select: { id: true, email: true, role: true, preferredLanguage: true, dailyGoal: true },
+            select: { id: true, email: true, role: true, preferredLanguage: true, plan: true, planExpiresAt: true, dailyGoal: true },
         });
 
         if (!profile) {
             await ensureLocalUser(session);
             profile = await prisma.user.findUnique({
                 where: { id: session.id },
-                select: { id: true, email: true, role: true, preferredLanguage: true, dailyGoal: true },
+                select: { id: true, email: true, role: true, preferredLanguage: true, plan: true, planExpiresAt: true, dailyGoal: true },
             });
         }
 
@@ -130,6 +142,8 @@ export async function getSession(): Promise<SessionUser | null> {
             email: profile.email,
             role: profile.role,
             preferredLanguage: profile.preferredLanguage,
+            plan: profile.plan,
+            planExpiresAt: profile.planExpiresAt,
         };
 
         if (cacheKey) {

@@ -36,6 +36,8 @@ export async function middleware(request: NextRequest) {
         pathname === '/passport' ||
         pathname === '/navigator' ||
         pathname === '/model' ||
+        pathname === '/pricing' ||
+        pathname.startsWith('/pay/return') ||
         pathname.startsWith('/quiz');
 
     const isAuthPage = ['/login', '/reset-password', '/auth'].some(

@@ -16,7 +16,8 @@
     "filter": "筛选",
     "reset": "重置",
     "submit": "提交",
-    "logout": "退出登录"
+    "logout": "退出登录",
+    "space": "空格"
   },
   "nav": {
     "home": "首页",
@@ -103,7 +104,11 @@
     "adverb": "副词",
     "comparative": "比较级",
     "superlative": "最高级",
-    "collinsStars": "柯林斯星级"
+    "collinsStars": "柯林斯星级",
+    "relatedWords": "相关单词",
+    "loadingNotes": "笔记加载中...",
+    "collinsStarsLabel": "柯林斯 {stars} 星",
+    "goBack": "返回"
   },
   "quiz": {
     "title": "单词裂变测验",
@@ -232,7 +237,9 @@
     "sdgPassport": "SDG 4 学习护照",
     "sdgPassportSub": "XAI 可解释学情认证 · CEFR 六维雷达",
     "blindSpotNavigator": "认知盲区导航器",
-    "blindSpotNavigatorSub": "图谱最短激活链 · AI 逐跳讲解"
+    "blindSpotNavigatorSub": "图谱最短激活链 · AI 逐跳讲解",
+    "loadFailed": "加载学习面板数据失败，请确认已登录。",
+    "cellTooltip": "{word} · {date}：得分 {score}"
   },
   "settings": {
     "title": "设置",
@@ -327,7 +334,8 @@
       "name": "词根词缀视觉积木",
       "description": "以启发式最长匹配拆分前缀、词根与后缀。",
       "heuristic": "Heuristic / 启发式拆分",
-      "empty": "暂无可靠结构数据"
+      "empty": "暂无可靠结构数据",
+      "badge": "词形学"
     },
     "youtube_clips": {
       "name": "YouTube 真实语境视频切片",
@@ -338,12 +346,14 @@
       "expandToLoad": "展开后加载第三方语境视频",
       "readyFallback": "YouGlish 已就绪，可在新窗口打开语境视频。",
       "error": "视频组件暂时不可用。",
-      "openExternal": "在 YouGlish 中打开"
+      "openExternal": "在 YouGlish 中打开",
+      "badge": "YouGlish"
     },
     "visual_mnemonic": {
       "name": "AI 意象图解与助记梗图",
       "description": "预留稳定插槽，未来接入视觉助记内容。",
-      "placeholder": "视觉助记功能尚未启用。此插槽保持固定高度。"
+      "placeholder": "视觉助记功能尚未启用。此插槽保持固定高度。",
+      "badge": "视觉AI"
     },
     "community_notes": {
       "name": "社区助记与个人笔记",
@@ -356,7 +366,8 @@
       "error": "学习记录暂时无法加载。",
       "mastery": "当前掌握度",
       "realData": "仅展示后端已有记录，不在客户端计算另一套记忆算法。",
-      "empty": "暂无学习记录"
+      "empty": "暂无学习记录",
+      "badge": "SM-2"
     },
     "ghost": {
       "label": "更多模块"
@@ -375,7 +386,7 @@
     "emailPlaceholder": "输入你的邮箱",
     "passwordPlaceholder": "输入密码",
     "keyCode": "密钥代码",
-    "keyCodePlaceholder": "wordlink_code_placeholder",
+    "keyCodePlaceholder": "输入密钥代码",
     "processing": "处理中...",
     "createAccount": "创建账号",
     "signIn": "登录",
@@ -410,7 +421,18 @@
     "passwordUpdated": "密码重置成功！正在跳转...",
     "backToLogin": "返回登录",
     "resetPasswordTitle": "设置新密码",
-    "resetPasswordSubtitle": "请输入您用于该账号的新密码"
+    "resetPasswordSubtitle": "请输入您用于该账号的新密码",
+    "sendResetEmailError": "重置邮件发送失败，请重试",
+    "resendConfirmationError": "验证邮件发送失败，请重试",
+    "genericError": "出现错误，请重试",
+    "updatePasswordError": "密码更新失败，请重试",
+    "togglePasswordVisibility": "切换密码可见性",
+    "toggleConfirmPasswordVisibility": "切换确认密码可见性",
+    "invalidCredentials": "邮箱或密码错误",
+    "emailNotConfirmed": "邮箱尚未验证，请先查收验证邮件",
+    "tooManyAttempts": "尝试次数过多，请稍后再试",
+    "profileUnavailable": "账号档案加载失败，请刷新重试",
+    "networkError": "网络异常，请检查连接后重试"
   },
   "ai": {
     "chat": "AI 对话",
@@ -522,7 +544,10 @@
     "time": "时间",
     "word": "单词",
     "type": "类型",
-    "result": "结果"
+    "result": "结果",
+    "notLoggedIn": "尚未登录，请先登录。",
+    "loadFailed": "加载历史记录失败（HTTP {status}）。",
+    "networkError": "网络错误，请重试。"
   },
   "layout": {
     "openSidebar": "打开侧边栏",
@@ -542,7 +567,8 @@
     "logoutFailed": "退出登录失败",
     "wordNotFound": "单词 \"{word}\" 未在数据库中找到。",
     "welcomeBack": "欢迎回来，{name}！",
-    "navigator": "导航器"
+    "navigator": "导航器",
+    "upgradePro": "升级 Pro"
   },
   "passport": {
     "back": "返回学习面板",
@@ -563,7 +589,10 @@
     "narrativeUnavailable": "AI 评语暂未生成（未配置 AI Key 时仍可查看数据雷达）。",
     "onboardingTitle": "你的护照正在等待第一枚印章",
     "onboardingDesc": "学习护照由真实学习数据驱动：完成一次测验或浏览几个单词，六维认知雷达和 CEFR 定位就会自动点亮。",
-    "startQuiz": "去完成第一次测验"
+    "startQuiz": "去完成第一次测验",
+    "unSdg": "联合国 · SDG 4",
+    "narrativeTitle": "XAI 学习叙事",
+    "footerCredit": "Lexiverse · AI for SDGs 全球青年创新大赛 2026"
   },
   "navigator": {
     "back": "返回",
@@ -574,7 +603,9 @@
     "searching": "正在图谱上搜索最短激活链…",
     "error": "导航暂时失败，请稍后重试。",
     "notFound": "在 4 跳范围内没有找到通往该词的激活路径，换一个目标试试。",
-    "routeFound": "已找到认知激活路线"
+    "routeFound": "已找到认知激活路线",
+    "routeStats": "{hops} 跳 · {seeds} 个起点词",
+    "coachingBrief": "AI 路径教练简报"
   },
   "appRail": {
     "study": "星图工作台",
@@ -590,5 +621,100 @@
     "productTour": "产品介绍",
     "home": "主界面",
     "logout": "退出登录"
+  },
+  "pricing": {
+    "backHome": "返回应用",
+    "title": "Lexiverse Pro",
+    "subtitle": "无限 AI 对话与文章生成，让读过的每篇文章都变成你记住的单词。",
+    "freePlan": "免费版 · AI 功能每日限量",
+    "proUntil": "已开通 · 有效期至 {date}",
+    "proLifetime": "已开通 · 永久有效",
+    "pro_monthly": {
+      "name": "Pro 月卡",
+      "desc": "30 天全部 Pro 权益"
+    },
+    "pro_yearly": {
+      "name": "Pro 年卡",
+      "desc": "365 天全部 Pro 权益",
+      "badge": "省 20%"
+    },
+    "perMonth": "/ 月",
+    "perYear": "/ 年",
+    "buy": "支付宝支付",
+    "extend": "续费 Pro",
+    "loginToBuy": "登录后购买",
+    "redirecting": "正在跳转支付宝…",
+    "orderFailed": "创建订单失败，请重试",
+    "notConfigured": "支付暂未开通，敬请期待",
+    "benefitsTitle": "Pro 权益",
+    "benefit1": "无限 AI 助教对话",
+    "benefit2": "无限 AI 文章生成",
+    "benefit3": "未来全部 Pro 功能",
+    "benefit4": "优先体验新模型",
+    "freeLimits": "免费版：每日 {chat} 次 AI 对话 · {stories} 次 AI 生成"
+  },
+  "pay": {
+    "return": {
+      "checking": "正在确认支付结果…",
+      "checkingDesc": "请稍候，我们正在向支付宝核实支付状态。",
+      "success": "支付成功",
+      "successDesc": "Lexiverse Pro 已开通，立即开始体验。",
+      "startUsing": "开始使用",
+      "pending": "支付结果确认中",
+      "pendingDesc": "支付宝暂未返回支付结果，请稍后重新查询。",
+      "recheck": "重新查询",
+      "noOrder": "链接中未找到订单信息",
+      "error": "查询订单状态失败",
+      "orderNo": "订单号 {no}",
+      "goHome": "返回应用"
+    }
+  },
+  "paywall": {
+    "quotaTitle": "今日免费额度已用完",
+    "quotaBody": "今日免费 AI 对话已用 {used}/{limit} 次，升级 Pro 后无限使用。",
+    "quotaBodyPlain": "今日免费 AI 额度已用完（每日 {limit} 次），前往 /pricing 升级 Pro 无限使用。",
+    "quotaAmbient": "今日免费 AI 生成已用 {used}/{limit} 次，升级 Pro 后无限生成。",
+    "upgrade": "升级 Pro"
+  },
+  "admin": {
+    "loading": "加载中...",
+    "title": "管理员入口",
+    "username": "用户名",
+    "password": "密码",
+    "login": "登录",
+    "loginFailed": "登录失败",
+    "errorOccurred": "发生错误，请重试",
+    "dashboardTitle": "管理面板",
+    "welcome": "欢迎，管理员。"
+  },
+  "libraryEdit": {
+    "loading": "加载中...",
+    "title": "编辑词库",
+    "nameLabel": "名称",
+    "descriptionLabel": "描述",
+    "addNewWord": "添加新单词",
+    "wordPlaceholder": "输入单词...",
+    "add": "添加",
+    "wordsCount": "单词（{count}）",
+    "selectAll": "全选",
+    "deselectAll": "取消全选",
+    "deleteCount": "删除（{count}）",
+    "saving": "保存中...",
+    "save": "保存",
+    "confirmDelete": "确定删除选中的 {count} 个单词吗？",
+    "addFailed": "添加单词失败"
+  },
+  "errors": {
+    "loading": "加载中…",
+    "notFoundTitle": "这一页漂出了星图",
+    "notFoundDesc": "你要找的页面不存在或已被移动。",
+    "backToHome": "返回首页",
+    "openWorkbench": "打开工作台",
+    "snagTitle": "Lexiverse 遇到了一点问题",
+    "snagDesc": "发生了一个未捕获的渲染错误，已被拦截。",
+    "clearCacheReload": "清除缓存并刷新",
+    "recoveringTitle": "Lexiverse 正在恢复",
+    "recoveringDesc": "捕获到一个渲染错误，点击下方按钮重置并恢复。",
+    "resetRecover": "重置并恢复"
   }
 }

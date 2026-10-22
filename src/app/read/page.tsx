@@ -52,6 +52,8 @@ export default function ReadHubPage() {
     const [genTheme, setGenTheme] = useState('');
     const [genLevel, setGenLevel] = useState<'A2' | 'B1' | 'B2' | 'C1'>('B1');
     const [generating, setGenerating] = useState(false);
+    const [genError, setGenError] = useState('');
+    const tp = useTranslations('paywall');
 
     useEffect(() => {
         let cancelled = false;
@@ -96,6 +98,7 @@ export default function ReadHubPage() {
 
     const handleCreateAiStory = async () => {
         setGenerating(true);
+        setGenError('');
         try {
             const res = await fetch('/api/ambient/articles/generate', {
                 method: 'POST',
@@ -105,6 +108,11 @@ export default function ReadHubPage() {
                     level: genLevel,
                 }),
             });
+            if (res.status === 402) {
+                const data = await res.json().catch(() => null);
+                setGenError(tp('quotaAmbient', { used: data?.used ?? '–', limit: data?.limit ?? '–' }));
+                return;
+            }
             if (res.ok) {
                 const created: ReaderArticle = await res.json();
                 setArticles((prev) => [created, ...prev]);
@@ -139,7 +147,7 @@ export default function ReadHubPage() {
                             className="font-serif-display mt-2 text-4xl italic tracking-wide text-white sm:text-5xl"
                             style={{ fontFamily: "'Instrument Serif', serif" }}
                         >
-                            Articles & Authentic Contexts
+                            {t('title')}
                         </h1>
                         <p className="mt-2 text-sm text-white/50" style={{ fontFamily: 'system-ui, sans-serif' }}>
                             {t('subtitle')}
@@ -150,7 +158,7 @@ export default function ReadHubPage() {
                     <div className="flex flex-wrap items-center gap-3">
                         <Link
                             href="/home"
-                            aria-label="Back to home"
+                            aria-label={t('backHomeAria')}
                             className="liquid-glass inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-2.5 text-xs font-medium text-white/75 transition-all hover:border-white/35 hover:bg-white/[0.06] hover:text-white"
                         >
                             <ArrowLeft size={14} />
@@ -368,7 +376,7 @@ export default function ReadHubPage() {
                                     className="font-serif-display text-2xl italic text-white"
                                     style={{ fontFamily: "'Instrument Serif', serif" }}
                                 >
-                                    AI Story Weaver
+                                    {tm('title')}
                                 </h3>
                             </div>
                             <button
@@ -420,6 +428,14 @@ export default function ReadHubPage() {
                                 </div>
                             </div>
 
+                            {genError && (
+                                <p className="text-xs text-rose-300">
+                                    {genError}{' '}
+                                    <Link href="/pricing" className="underline underline-offset-2 text-amber-200">
+                                        {tp('upgrade')}
+                                    </Link>
+                                </p>
+                            )}
                             <button
                                 type="button"
                                 onClick={handleCreateAiStory}

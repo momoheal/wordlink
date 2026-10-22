@@ -73,7 +73,8 @@
       "libCet6": "CET-6 ",
       "libPostgrad": "Grad School ",
       "libToefl": "TOEFL ",
-      "libSat": "SAT "
+      "libSat": "SAT",
+      "title": "Playlist & Vocabulary Hub"
     },
     "picker": {
       "subtitle": "Immersive listening · Sentence-by-sentence narration · AI personalization",
@@ -86,10 +87,19 @@
       "cancel": "Cancel",
       "creating": "Creating…",
       "generateRead": "Generate & Read",
-      "loadingArticles": "Loading articles…"
+      "loadingArticles": "Loading articles…",
+      "title": "Reading Library",
+      "wordCount": "{count} words",
+      "playing": "Playing"
     },
     "reading": {
       "opening": "Opening your reading world…"
+    },
+    "seasons": {
+      "spring": "Spring",
+      "summer": "Summer",
+      "autumn": "Autumn",
+      "winter": "Winter"
     }
   }
 }

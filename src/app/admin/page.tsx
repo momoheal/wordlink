@@ -2,8 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations, useLocale } from 'next-intl';
 
 export default function AdminPage() {
+    const t = useTranslations('admin');
+    const locale = useLocale();
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [loading, setLoading] = useState(true);
     const [username, setUsername] = useState('');
@@ -51,23 +54,23 @@ export default function AdminPage() {
                 setIsAuthenticated(true);
             } else {
                 const data = await res.json();
-                setError(data.error || 'Login failed');
+                setError(locale === 'zh' ? t('loginFailed') : (data.error || t('loginFailed')));
             }
         } catch (e) {
-            setError('An error occurred');
+            setError(t('errorOccurred'));
         }
     };
 
-    if (loading) return <div className="min-h-screen bg-black text-white flex items-center justify-center">Loading...</div>;
+    if (loading) return <div className="min-h-screen bg-black text-white flex items-center justify-center">{t('loading')}</div>;
 
     if (!isAuthenticated) {
         return (
             <div className="min-h-screen bg-black text-white flex items-center justify-center p-4">
                 <div className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-xl p-8">
-                    <h1 className="text-2xl font-bold mb-6 text-center">Admin Access</h1>
+                    <h1 className="text-2xl font-bold mb-6 text-center">{t('title')}</h1>
                     <form onSubmit={handleLogin} className="space-y-4">
                         <div>
-                            <label className="block text-sm text-neutral-400 mb-1">Username</label>
+                            <label className="block text-sm text-neutral-400 mb-1">{t('username')}</label>
                             <input
                                 type="text"
                                 value={username}
@@ -76,7 +79,7 @@ export default function AdminPage() {
                             />
                         </div>
                         <div>
-                            <label className="block text-sm text-neutral-400 mb-1">Password</label>
+                            <label className="block text-sm text-neutral-400 mb-1">{t('password')}</label>
                             <input
                                 type="password"
                                 value={password}
@@ -89,7 +92,7 @@ export default function AdminPage() {
                             type="submit"
                             className="w-full bg-blue-600 hover:bg-blue-500 text-white py-2 rounded-lg font-medium transition-colors"
                         >
-                            Login
+                            {t('login')}
                         </button>
                     </form>
                 </div>
@@ -100,8 +103,8 @@ export default function AdminPage() {
     return (
         <div className="min-h-screen bg-black text-white p-8">
             <div className="max-w-4xl mx-auto">
-                <h1 className="text-3xl font-bold mb-8">Admin Dashboard</h1>
-                <p className="text-neutral-400">Welcome, Administrator.</p>
+                <h1 className="text-3xl font-bold mb-8">{t('dashboardTitle')}</h1>
+                <p className="text-neutral-400">{t('welcome')}</p>
                 {/* Add admin features here later */}
             </div>
         </div>

@@ -4,8 +4,27 @@
 
 const AUTH_COOKIE_PATTERN = /^sb-.+-auth-token(\.\d+)?$/;
 
+// Same derivation as @supabase/supabase-js: sb-<hostname[0]>-auth-token.
+// Restricting to the configured project's cookie keeps stale auth cookies
+// from other Supabase projects on the same host from corrupting extraction.
+function projectCookiePattern(): RegExp | null {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (!url) return null;
+    try {
+        const ref = new URL(url).hostname.split('.')[0];
+        const esc = ref.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return new RegExp(`^sb-${esc}-auth-token(\\.\\d+)?$`);
+    } catch {
+        return null;
+    }
+}
+
+function isAuthCookieName(name: string): boolean {
+    return (projectCookiePattern() ?? AUTH_COOKIE_PATTERN).test(name);
+}
+
 export function hasAuthCookie(cookies: { name: string }[]): boolean {
-    return cookies.some((c) => AUTH_COOKIE_PATTERN.test(c.name));
+    return cookies.some((c) => isAuthCookieName(c.name));
 }
 
 function decodeCookieValue(raw: string): string {
@@ -33,7 +52,7 @@ export function extractAccessToken(
     cookies: { name: string; value: string }[],
 ): string | null {
     const chunks = cookies
-        .filter((c) => AUTH_COOKIE_PATTERN.test(c.name))
+        .filter((c) => isAuthCookieName(c.name))
         .sort((a, b) => {
             const idx = (n: string) => {
                 const m = n.match(/\.(\d+)$/);

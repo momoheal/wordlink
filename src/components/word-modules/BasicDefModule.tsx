@@ -50,7 +50,7 @@ export default function BasicDefModule({ word, chineseData, content, onWordClick
             <div className="flex items-center gap-3 text-sm font-mono text-neutral-400">
               <span>/{chineseData.phonetic || chineseData.pronunciation}/</span>
               {Number.isFinite(Number(chineseData.collins)) && Math.floor(Number(chineseData.collins)) > 0 && (
-                <span className="text-yellow-500" aria-label={`Collins ${chineseData.collins} stars`}>
+                <span className="text-yellow-500" aria-label={t('wordDetail.collinsStarsLabel', { stars: Math.floor(Number(chineseData.collins)) })}>
                   {'★'.repeat(Math.min(5, Math.floor(Number(chineseData.collins))))}
                 </span>
               )}

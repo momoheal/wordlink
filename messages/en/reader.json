@@ -27,7 +27,9 @@
         "autumn": "🍁 Autumn",
         "winter": "❄️ Winter",
         "ai": "🤖 AI Custom"
-      }
+      },
+      "title": "Articles & Authentic Contexts",
+      "backHomeAria": "Back to home"
     },
     "modal": {
       "desc": "DeepSeek automatically weaves the words at the edge of your forgetting curve into a personalized 90–120 word contextual story.",
@@ -35,7 +37,8 @@
       "themePlaceholder": "Leave blank for auto-match, or e.g. autumn wind, old bookstore",
       "levelLabel": "Language Level",
       "generating": "DeepSeek is weaving your story…",
-      "generate": "Generate & Start Reading"
+      "generate": "Generate & Start Reading",
+      "title": "AI Story Weaver"
     },
     "detail": {
       "loading": "Deconstructing holographic context…",
@@ -77,7 +80,8 @@
       "ask": "Ask",
       "aiAck": "AI tutor received your question",
       "aiError": "Failed to answer. Please try again later.",
-      "aiPrompt": "In the following English context:\n\"{sentence}\"\n\nPlease answer in English: {question}"
+      "aiPrompt": "In the following English context:\n\"{sentence}\"\n\nPlease answer in English: {question}",
+      "definitions": "Definitions"
     },
     "audio": {
       "restart": "Play from start",

@@ -15,20 +15,28 @@ import { getLocale, getMessages } from 'next-intl/server';
 //   subsets: ["latin"],
 // });
 
-export const metadata: Metadata = {
-  title: "Lexiverse",
-  description: "Lexiverse - AI contextual reading engine for English learners. Your next article is your next review.",
-  icons: {
-    icon: '/icon.png',
-    apple: '/icon.png',
-  },
-  manifest: '/manifest.json',
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'black-translucent',
-    title: 'Lexiverse',
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  let locale = 'en';
+  try {
+    locale = await getLocale();
+  } catch {}
+  return {
+    title: "Lexiverse",
+    description: locale === 'zh'
+      ? "Lexiverse - 面向英语学习者的 AI 语境阅读引擎。你读的下一篇文章，就是你的下一次复习。"
+      : "Lexiverse - AI contextual reading engine for English learners. Your next article is your next review.",
+    icons: {
+      icon: '/icon.png',
+      apple: '/icon.png',
+    },
+    manifest: '/manifest.json',
+    appleWebApp: {
+      capable: true,
+      statusBarStyle: 'black-translucent',
+      title: 'Lexiverse',
+    },
+  };
+}
 
 export const viewport: Viewport = {
   width: 'device-width',

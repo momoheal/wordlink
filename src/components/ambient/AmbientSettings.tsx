@@ -195,7 +195,7 @@ export default function AmbientSettings({
                 return;
             }
             const res = await fetch(
-                `/api/library-words?path=${encodeURIComponent(path)}&groupIndex=${groupIdx}&groupSize=${groupSize}&includeDefinitions=true`,
+                `/api/library-words?path=${encodeURIComponent(path)}&groupIndex=${groupIdx}&groupSize=${groupSize}&includeDefinitions=true&slim=1`,
             );
             if (res.ok) {
                 const data: unknown = await res.json();
@@ -311,7 +311,7 @@ export default function AmbientSettings({
                                 className="font-serif-display text-2xl italic tracking-wide text-white sm:text-3xl"
                                 style={{ fontFamily: "'Instrument Serif', serif" }}
                             >
-                                Playlist & Vocabulary Hub
+                                {t('title')}
                             </h2>
                             <p className="text-[11px] text-white/50" style={{ fontFamily: 'system-ui, sans-serif' }}>
                                 {t('headerSubtitle')}

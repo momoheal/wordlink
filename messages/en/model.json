@@ -16,25 +16,58 @@
       "evidence": "The value of small-model fine-tuning (+25pp hit rate at the same scale, JSON 82%→100%) and scale-independent zero-shot failure (7B zero-shot: 39.72% hit / 0% JSON) together form the complete evidence chain for why domain fine-tuning is necessary. DPO is statistically on par with SFT (the difference lies within the n=90 noise band), with steadier behavioral convergence and zero reward-hacking regressions — it validates the safety of the alignment recipe, not metric-chasing."
     },
     "metrics": {
-      "hit": { "label": "Target-word injection hit rate", "note": "63.06% before fine-tuning · +25pp" },
-      "json": { "label": "JSON structural compliance", "note": "82.22% before fine-tuning" },
-      "cefr": { "label": "CEFR out-of-level vocabulary", "note": "0.17% before fine-tuning" },
-      "fkgl": { "label": "FKGL reading difficulty", "note": "13.5 before fine-tuning · matches A2/B1" }
+      "hit": {
+        "label": "Target-word injection hit rate",
+        "note": "63.06% before fine-tuning · +25pp"
+      },
+      "json": {
+        "label": "JSON structural compliance",
+        "note": "82.22% before fine-tuning"
+      },
+      "cefr": {
+        "label": "CEFR out-of-level vocabulary",
+        "note": "0.17% before fine-tuning"
+      },
+      "fkgl": {
+        "label": "FKGL reading difficulty",
+        "note": "13.5 before fine-tuning · matches A2/B1"
+      }
     },
     "task": {
       "title": "Base model & task definition,",
       "titleAccent": "four hard constraints",
       "sub": "Why 1.5B: it is the smallest engine that passes the quality bar in testing. The target form factor is in-browser on-device inference — works offline, zero marginal cost, and student data never leaves the device.",
       "rows": {
-        "base": { "label": "Base model", "value": "Qwen/Qwen2.5-1.5B-Instruct (Alibaba Tongyi, Apache 2.0)" },
-        "definition": { "label": "Task definition", "value": "CEFR-constrained micro-story generation: given a topic + 3~4 due review words + a level (A2/B1/B2), output a JSON-structured short story (title / body / Chinese translation / vocabulary notes) with target words bolded inline" },
-        "target": { "label": "Target form factor", "value": "In-browser WebGPU 4-bit on-device inference (~950MB; offline, zero marginal cost, data never leaves the device)" }
+        "base": {
+          "label": "Base model",
+          "value": "Qwen/Qwen2.5-1.5B-Instruct (Alibaba Tongyi, Apache 2.0)"
+        },
+        "definition": {
+          "label": "Task definition",
+          "value": "CEFR-constrained micro-story generation: given a topic + 3~4 due review words + a level (A2/B1/B2), output a JSON-structured short story (title / body / Chinese translation / vocabulary notes) with target words bolded inline"
+        },
+        "target": {
+          "label": "Target form factor",
+          "value": "In-browser WebGPU 4-bit on-device inference (~950MB; offline, zero marginal cost, data never leaves the device)"
+        }
       },
       "constraints": {
-        "c1": { "t": "100% target-word injection", "d": "Every due review word must be embedded naturally in the story" },
-        "c2": { "t": "No out-of-level CEFR vocabulary", "d": "An A2 learner never meets B2 vocabulary" },
-        "c3": { "t": "60~200 words long", "d": "Readable in under a minute per session" },
-        "c4": { "t": "Valid JSON structure", "d": "Output can be consumed programmatically as-is" }
+        "c1": {
+          "t": "100% target-word injection",
+          "d": "Every due review word must be embedded naturally in the story"
+        },
+        "c2": {
+          "t": "No out-of-level CEFR vocabulary",
+          "d": "An A2 learner never meets B2 vocabulary"
+        },
+        "c3": {
+          "t": "60~200 words long",
+          "d": "Readable in under a minute per session"
+        },
+        "c4": {
+          "t": "Valid JSON structure",
+          "d": "Output can be consumed programmatically as-is"
+        }
       }
     },
     "data": {
@@ -63,12 +96,30 @@
       "titleAccent": "three skills learned in 351 steps",
       "sub": "Target-word slot injection, CEFR boundary control, and structured JSON output. Control group: v1 template data converged in 93 steps at loss 0.029 — such a low loss is itself hard evidence of template memorization; v2's loss of 0.37 is the learning curve of real generalization.",
       "rows": {
-        "framework": { "label": "Framework", "value": "TRL 0.11 SFTTrainer + PEFT 0.13.2 + transformers 4.45.2 + torch 2.5.1 (MPS)" },
-        "data": { "label": "Data", "value": "2045 entries (train 1881 / eval 164, seed=42)" },
-        "lora": { "label": "LoRA", "value": "r=64, α=128, dropout=0.05, target=[q,k,v,o,gate,up,down]_proj" },
-        "hyper": { "label": "Hyperparameters", "value": "lr 2e-4 cosine, warmup 3%, 3 epochs, batch 1 × accum 16, max_seq 896 (fixed-length padding, zero truncation)" },
-        "precision": { "label": "Precision", "value": "fp32 (bf16 has an autocast memory leak on MPS and showed no speedup, so it was dropped)" },
-        "result": { "label": "Result", "value": "351/351 steps, final loss ≈ 0.37, adapter 295MB" }
+        "framework": {
+          "label": "Framework",
+          "value": "TRL 0.11 SFTTrainer + PEFT 0.13.2 + transformers 4.45.2 + torch 2.5.1 (MPS)"
+        },
+        "data": {
+          "label": "Data",
+          "value": "2045 entries (train 1881 / eval 164, seed=42)"
+        },
+        "lora": {
+          "label": "LoRA",
+          "value": "r=64, α=128, dropout=0.05, target=[q,k,v,o,gate,up,down]_proj"
+        },
+        "hyper": {
+          "label": "Hyperparameters",
+          "value": "lr 2e-4 cosine, warmup 3%, 3 epochs, batch 1 × accum 16, max_seq 896 (fixed-length padding, zero truncation)"
+        },
+        "precision": {
+          "label": "Precision",
+          "value": "fp32 (bf16 has an autocast memory leak on MPS and showed no speedup, so it was dropped)"
+        },
+        "result": {
+          "label": "Result",
+          "value": "351/351 steps, final loss ≈ 0.37, adapter 295MB"
+        }
       }
     },
     "dpo": {
@@ -76,12 +127,30 @@
       "titleAccent": "alignment safety validation",
       "sub": "Statistically on par with SFT with zero regression — DPO's value lies in behavioral robustness (which shows under distribution shift), not benchmark gains. All four acceptance checks passed, proving the recipe neither idles nor reward-hacks.",
       "rows": {
-        "start": { "label": "Starting point", "value": "Base + SFT LoRA merged via merge_and_unload() (wordlink_edge_sft_v2_merged)" },
-        "lora": { "label": "DPO LoRA", "value": "r=32, α=64, dropout=0.05, target=[q,v,o,gate,down]_proj (25.9M trainable parameters)" },
-        "betaLr": { "label": "β / LR", "value": "0.1 / 5e-6, cosine, warmup 5%, 2 epochs, batch 1 × accum 16, seed=42" },
-        "data": { "label": "Data", "value": "2045 pairs (chosen = positives after five hard filters / rejected = real 7B zero-shot failure outputs)" },
-        "guard": { "label": "Safety valve", "value": "NoOpGuard: throws if loss<1e-4 within the first 20 steps (prevents no-op training)" },
-        "result": { "label": "Result", "value": "256/256 steps, all four acceptance checks passed: margins climbing 0.105→11.28 | loss converging 0.6438→0.0001 | adapter MD5≠SFT | chosen logps continuously changing" }
+        "start": {
+          "label": "Starting point",
+          "value": "Base + SFT LoRA merged via merge_and_unload() (wordlink_edge_sft_v2_merged)"
+        },
+        "lora": {
+          "label": "DPO LoRA",
+          "value": "r=32, α=64, dropout=0.05, target=[q,v,o,gate,down]_proj (25.9M trainable parameters)"
+        },
+        "betaLr": {
+          "label": "β / LR",
+          "value": "0.1 / 5e-6, cosine, warmup 5%, 2 epochs, batch 1 × accum 16, seed=42"
+        },
+        "data": {
+          "label": "Data",
+          "value": "2045 pairs (chosen = positives after five hard filters / rejected = real 7B zero-shot failure outputs)"
+        },
+        "guard": {
+          "label": "Safety valve",
+          "value": "NoOpGuard: throws if loss<1e-4 within the first 20 steps (prevents no-op training)"
+        },
+        "result": {
+          "label": "Result",
+          "value": "256/256 steps, all four acceptance checks passed: margins climbing 0.105→11.28 | loss converging 0.6438→0.0001 | adapter MD5≠SFT | chosen logps continuously changing"
+        }
       },
       "incident": {
         "eyebrow": "⚠ Engineering postmortem · the v1 DPO no-op incident",
@@ -97,28 +166,80 @@
       "title": "Apple MPS training stability,",
       "titleAccent": "five pitfalls and their fixes",
       "sub": "Completing the full real training pipeline on a 48GB unified-memory Mac without CUDA took a whole set of platform-level workarounds. The segmented-resume scheme is now codified as an orchestrator plus watchdog, running hundreds of steps unattended.",
-      "headers": { "problem": "Problem", "symptom": "Symptom", "fix": "Root cause & fix" },
+      "headers": {
+        "problem": "Problem",
+        "symptom": "Symptom",
+        "fix": "Root cause & fix"
+      },
       "rows": {
-        "leak": { "p": "Linear memory leak", "s": "Memory grows ~1.4GB/step in long single-process runs, independent of precision, batch size, grouping, or GC frequency", "f": "Platform-level issue in the torch MPS backend → segmented resume: checkpoint and exit every 117/128 steps, relaunch a fresh process from the checkpoint, orchestrator loops until done" },
-        "denominator": { "p": "Memory-cap denominator misunderstanding", "s": "Assumed 0.60=28.8GB; actually 22.46GB", "f": "The denominator of set_per_process_memory_fraction is the system-recommended 37.4GB, not the physical 48GB → recompute the watermark against the true denominator" },
-        "fragmentation": { "p": "Variable-length fragmentation", "s": "Tensor shapes differ every step; allocator cache reuse is zero", "f": "batch=1 + continuously distributed lengths (636~891 tok) → fixed-length padding (896, zero truncation)" },
-        "bf16": { "p": "bf16 autocast leak", "s": "bf16 adds a net 1.2GB per step", "f": "torch 2.5.1 MPS autocast → dropped bf16 for fp32 (no measured speed difference)" },
-        "crash": { "p": "Crash fallback", "s": "Process dies on OOM", "f": "Hard ceiling guardrails → checkpoint every 40 steps + watchdog auto-resume; loss bounded to ≤40 steps" }
+        "leak": {
+          "p": "Linear memory leak",
+          "s": "Memory grows ~1.4GB/step in long single-process runs, independent of precision, batch size, grouping, or GC frequency",
+          "f": "Platform-level issue in the torch MPS backend → segmented resume: checkpoint and exit every 117/128 steps, relaunch a fresh process from the checkpoint, orchestrator loops until done"
+        },
+        "denominator": {
+          "p": "Memory-cap denominator misunderstanding",
+          "s": "Assumed 0.60=28.8GB; actually 22.46GB",
+          "f": "The denominator of set_per_process_memory_fraction is the system-recommended 37.4GB, not the physical 48GB → recompute the watermark against the true denominator"
+        },
+        "fragmentation": {
+          "p": "Variable-length fragmentation",
+          "s": "Tensor shapes differ every step; allocator cache reuse is zero",
+          "f": "batch=1 + continuously distributed lengths (636~891 tok) → fixed-length padding (896, zero truncation)"
+        },
+        "bf16": {
+          "p": "bf16 autocast leak",
+          "s": "bf16 adds a net 1.2GB per step",
+          "f": "torch 2.5.1 MPS autocast → dropped bf16 for fp32 (no measured speed difference)"
+        },
+        "crash": {
+          "p": "Crash fallback",
+          "s": "Process dies on OOM",
+          "f": "Hard ceiling guardrails → checkpoint every 40 steps + watchdog auto-resume; loss bounded to ≤40 steps"
+        }
       }
     },
     "bench": {
       "title": "Final measured results,",
       "titleAccent": "90 prompts · greedy decoding · scored from real outputs",
       "sub": "All metrics are computed by an automated evaluator on the model's real generations (temperature=0); evaluation details and per-prompt outputs live in the repo under outputs/eval/. Target-word hit = share of due review words naturally embedded in the story; out-of-level = share of vocabulary beyond the target CEFR level.",
-      "headers": { "model": "Model", "hit": "Hit ↑", "oob": "Out-of-level ↓", "json": "JSON ↑", "fkgl": "FKGL", "note": "Notes" },
+      "headers": {
+        "model": "Model",
+        "hit": "Hit ↑",
+        "oob": "Out-of-level ↓",
+        "json": "JSON ↑",
+        "fkgl": "FKGL",
+        "note": "Notes"
+      },
       "rows": {
-        "base": { "name": "Qwen2.5-1.5B base (pre-finetune)", "note": "Baseline" },
-        "sft": { "name": "+ domain SFT (v2 corpus)", "note": "Generalization split · this product" },
-        "dpo": { "name": "+ DPO preference alignment (v2)", "note": "On par with SFT, steadier behavior" },
-        "q7b": { "name": "Qwen2.5-7B zero-shot", "note": "85/90 degenerate repetition" },
-        "q7bLenient": { "name": "Qwen2.5-7B zero-shot (anti-degeneracy leniency)", "note": "Sampling parameters can't save it" },
-        "deepseek": { "name": "DeepSeek-V3 zero-shot (teacher)", "note": "Commercial flagship reference" },
-        "oracle": { "name": "Teacher / Oracle", "note": "Upper bound" }
+        "base": {
+          "name": "Qwen2.5-1.5B base (pre-finetune)",
+          "note": "Baseline"
+        },
+        "sft": {
+          "name": "+ domain SFT (v2 corpus)",
+          "note": "Generalization split · this product"
+        },
+        "dpo": {
+          "name": "+ DPO preference alignment (v2)",
+          "note": "On par with SFT, steadier behavior"
+        },
+        "q7b": {
+          "name": "Qwen2.5-7B zero-shot",
+          "note": "85/90 degenerate repetition"
+        },
+        "q7bLenient": {
+          "name": "Qwen2.5-7B zero-shot (anti-degeneracy leniency)",
+          "note": "Sampling parameters can't save it"
+        },
+        "deepseek": {
+          "name": "DeepSeek-V3 zero-shot (teacher)",
+          "note": "Commercial flagship reference"
+        },
+        "oracle": {
+          "name": "Teacher / Oracle",
+          "note": "Upper bound"
+        }
       },
       "footnote": "* The 7B zero-shot failure is independent of sampling parameters: a rerun with anti-degeneracy leniency still scored 41.67% / 0% JSON. Fine-tuning lets the 1.5B approach the DeepSeek-V3 teacher on the same task (88.06% vs 97.78%; the remaining gap is mainly rhetorical quality in long, complex sentences) and far surpasses an unfine-tuned model 4.7× its size."
     },
@@ -126,7 +247,11 @@
       "title": "Artifact inventory,",
       "titleAccent": "fully verifiable",
       "etc": "etc.",
-      "headers": { "artifact": "Artifact", "location": "Location", "md5": "MD5" },
+      "headers": {
+        "artifact": "Artifact",
+        "location": "Location",
+        "md5": "MD5"
+      },
       "rows": {
         "sftAdapter": "SFT v2 adapter (295MB)",
         "dpoAdapter": "DPO v2 adapter",
@@ -139,13 +264,32 @@
     "next": {
       "title": "Open items & next steps,",
       "titleAccent": "an honest list",
-      "n1": { "t": "Measurable DPO gains", "d": "near-miss negatives (almost-right outputs off by a single word) + a larger test set (500 prompts) + multi-seed confidence intervals" },
-      "n2": { "t": "On-device quantization", "d": "MLC/WebLLM 4-bit export (compile_mlc.sh, requires the mlc-llm toolchain) or a one-click GPU-server pipeline" },
-      "n3": { "t": "Corpus v3", "d": "Mixed generation with a second teacher to improve stylistic diversity" }
+      "n1": {
+        "t": "Measurable DPO gains",
+        "d": "near-miss negatives (almost-right outputs off by a single word) + a larger test set (500 prompts) + multi-seed confidence intervals"
+      },
+      "n2": {
+        "t": "On-device quantization",
+        "d": "MLC/WebLLM 4-bit export (compile_mlc.sh, requires the mlc-llm toolchain) or a one-click GPU-server pipeline"
+      },
+      "n3": {
+        "t": "Corpus v3",
+        "d": "Mixed generation with a second teacher to improve stylistic diversity"
+      }
     },
     "footer": {
       "sources": "Sources: measured artifacts in the repo's outputs/eval/ · full training report docs/模型训练详细报告.md · single source of truth for numbers: BENCHMARK_RESULTS.md",
       "backHome": "Back to Home"
+    },
+    "sections": {
+      "task": "01 · Task",
+      "data": "02 · Data",
+      "sft": "03 · SFT",
+      "dpo": "04 · DPO",
+      "mps": "05 · Engineering",
+      "bench": "06 · Benchmark",
+      "artifacts": "07 · Artifacts",
+      "next": "08 · Roadmap"
     }
   }
 }

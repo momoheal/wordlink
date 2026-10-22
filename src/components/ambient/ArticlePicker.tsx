@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { Loader2, Sparkles, X } from 'lucide-react';
 import type { ArticleData } from './useArticleReader';
@@ -41,15 +42,18 @@ export default function ArticlePicker({
     season: string;
 }) {
     const t = useTranslations('ambient.picker');
+    const tp = useTranslations('paywall');
     const [showGen, setShowGen] = useState(false);
     const [theme, setTheme] = useState('');
     const [level, setLevel] = useState('B1');
     const [generating, setGenerating] = useState(false);
     const [genError, setGenError] = useState('');
+    const [quotaHit, setQuotaHit] = useState(false);
 
     const generate = async () => {
         setGenerating(true);
         setGenError('');
+        setQuotaHit(false);
         try {
             const res = await fetch('/api/ambient/articles/generate', {
                 method: 'POST',
@@ -57,6 +61,11 @@ export default function ArticlePicker({
                 body: JSON.stringify({ theme: theme.trim() || undefined, level, season }),
             });
             const data = await res.json();
+            if (res.status === 402) {
+                setQuotaHit(true);
+                setGenError(tp('quotaAmbient', { used: data?.used ?? '–', limit: data?.limit ?? '–' }));
+                return;
+            }
             if (!res.ok) {
                 setGenError(data?.error || t('genFailed'));
                 return;
@@ -84,7 +93,7 @@ export default function ArticlePicker({
                             className="font-serif-display text-2xl italic text-white"
                             style={{ fontFamily: "'Instrument Serif', serif" }}
                         >
-                            Reading Library
+                            {t('title')}
                         </h2>
                         <p className="mt-0.5 text-[11px] text-white/45" style={{ fontFamily: 'system-ui, sans-serif' }}>
                             {t('subtitle')}
@@ -148,6 +157,15 @@ export default function ArticlePicker({
                                 ))}
                             </div>
                             {genError && <p className="text-xs text-rose-300">{genError}</p>}
+                            {quotaHit && (
+                                <Link
+                                    href="/pricing"
+                                    className="inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-1.5 text-xs font-semibold text-black hover:bg-white/90"
+                                >
+                                    <Sparkles size={12} />
+                                    {tp('upgrade')}
+                                </Link>
+                            )}
                             <div className="flex gap-2">
                                 <button
                                     type="button"
@@ -221,7 +239,7 @@ export default function ArticlePicker({
                                                         {a.level}
                                                     </span>
                                                     {a.season && <span>{SEASON_EMOJI[a.season]}</span>}
-                                                    <span>· {a.wordCount} words</span>
+                                                    <span>· {t('wordCount', { count: a.wordCount })}</span>
                                                     {a.source === 'ai' && (
                                                         <span className="text-amber-300/70">· ✨ AI</span>
                                                     )}
@@ -229,7 +247,7 @@ export default function ArticlePicker({
                                             </div>
                                             {isCurrent && (
                                                 <span className="shrink-0 text-[10px] uppercase tracking-widest text-white/60">
-                                                    Playing
+                                                    {t('playing')}
                                                 </span>
                                             )}
                                         </div>

@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { Clock, Award, Check, X, Eye, ChevronDown, ChevronUp } from 'lucide-react';
 
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { useSettings } from '@/context/SettingsContext';
 import { useDeviceType } from '@/lib/hooks/useMediaQuery';
 import { useForceMobileLayout } from '@/lib/hooks';
@@ -40,6 +40,7 @@ function isLibraryItem(value: unknown): value is LibraryItem {
 
 export default function HistoryPage() {
     const t = useTranslations();
+    const locale = useLocale();
     const { groupSize } = useSettings();
     const deviceType = useDeviceType();
     const forceMobileLayout = useForceMobileLayout();
@@ -143,7 +144,7 @@ export default function HistoryPage() {
                 setIsAuthError(true);
                 setVisits([]);
                 setQuizzes([]);
-                setError('You are not logged in. Please log in first.');
+                setError(t('history.notLoggedIn'));
                 return;
             }
 
@@ -154,7 +155,7 @@ export default function HistoryPage() {
                         ? ` ${errorBody.details}`
                         : '';
                 setIsAuthError(false);
-                setError(`Failed to load history (HTTP ${response.status}).${details}`);
+                setError(t('history.loadFailed', { status: response.status }) + (locale === 'zh' ? '' : details));
                 return;
             }
 
@@ -164,7 +165,7 @@ export default function HistoryPage() {
             setError(null);
         } catch {
             setIsAuthError(false);
-            setError('Network error. Please try again.');
+            setError(t('history.networkError'));
         } finally {
             setLoading(false);
         }

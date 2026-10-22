@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
-import { ensureLocalUser, getSession } from '@/lib/auth';
+import { ensureLocalUser, getSession, isPro } from '@/lib/auth';
+import { checkDailyQuota, quotaExceededResponse } from '@/lib/quota';
 import { rateLimit, tooManyRequests } from '@/lib/rate-limit';
 import fs from 'fs';
 import path from 'path';
@@ -52,6 +54,18 @@ export async function POST(request: NextRequest) {
     if (!gate.ok) return tooManyRequests(gate.retryAfterSec);
 
     await ensureLocalUser(session);
+
+    // 付费墙：免费用户每日额度，Pro 不限
+    if (!isPro(session)) {
+        const quota = await checkDailyQuota(session.id, 'aiChat');
+        if (!quota.allowed) return quotaExceededResponse(quota, 'aiChat');
+    }
+
+    // AI 回复语言跟随界面语言：NEXT_LOCALE cookie 即 UI 语言，session 偏好兜底
+    const cookieLang = (await cookies()).get('NEXT_LOCALE')?.value;
+    const lang = cookieLang === 'zh' || cookieLang === 'en'
+        ? cookieLang
+        : (session.preferredLanguage === 'zh' ? 'zh' : 'en');
 
     try {
         const body: ChatRequest = await request.json();
@@ -171,6 +185,10 @@ export async function POST(request: NextRequest) {
         }
 
         // 4. API Call
+        systemPrompt += '\n\n' + (lang === 'zh'
+            ? 'Always reply in Simplified Chinese (简体中文).'
+            : 'Reply in English.');
+
         const fullMessages = [
             { role: 'system', content: systemPrompt },
             ...messages, // History

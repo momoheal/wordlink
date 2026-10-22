@@ -52,7 +52,7 @@ export default function SettingsContent() {
     }, [recordingKey, shortcuts, updateSettings]);
 
     const formatKey = (key: string) => {
-        if (key === ' ') return 'Space';
+        if (key === ' ') return t('common.space');
         return key.toUpperCase();
     };
 
@@ -446,7 +446,7 @@ export default function SettingsContent() {
                                             <div className="min-w-0">
                                                 <div className="flex items-center gap-2">
                                                     <p className="truncate text-sm font-medium text-neutral-200">{t(`modules.${meta.name}`)}</p>
-                                                    {meta.badgeText && <span className="rounded border border-neutral-700 bg-neutral-900 px-1.5 py-0.5 text-[9px] font-mono text-neutral-500">{meta.badgeText}</span>}
+                                                    {meta.badgeKey && <span className="rounded border border-neutral-700 bg-neutral-900 px-1.5 py-0.5 text-[9px] font-mono text-neutral-500">{(() => { try { return t(`modules.${meta.badgeKey}`); } catch { return ''; } })()}</span>}
                                                 </div>
                                                 <p className="mt-1 text-xs leading-relaxed text-neutral-500">{t(`modules.${meta.description}`)}</p>
                                             </div>

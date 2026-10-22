@@ -1,15 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Mail, Lock, ArrowLeft, Send, Eye, EyeOff } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 
 type AuthMode = 'login' | 'register' | 'forgot' | 'resend';
 
 export default function LoginPage() {
     const router = useRouter();
     const t = useTranslations();
+    const locale = useLocale();
     const [mode, setMode] = useState<AuthMode>('login');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -19,6 +20,25 @@ export default function LoginPage() {
     const [error, setError] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
     const [loading, setLoading] = useState(false);
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => setMounted(true), []);
+
+    const mapApiError = (apiError: string | undefined, fallbackKey: string): string => {
+        const e = (apiError || '').toLowerCase();
+        if (e.includes('invalid login credentials') || e.includes('invalid email or password')) return t('auth.invalidCredentials');
+        if (e.includes('email not confirmed')) return t('auth.emailNotConfirmed');
+        if (e.includes('too many') || e.includes('rate limit')) return t('auth.tooManyAttempts');
+        if (e.includes('profile')) return t('auth.profileUnavailable');
+        if (apiError && locale !== 'zh') return apiError;
+        return t(fallbackKey);
+    };
+
+    const mapCatchError = (err: unknown): string => {
+        if (!(err instanceof Error)) return t('auth.genericError');
+        const m = err.message.toLowerCase();
+        if (m.includes('failed to fetch') || m.includes('networkerror') || m.includes('network request')) return t('auth.networkError');
+        return err.message;
+    };
 
     const switchMode = (newMode: AuthMode) => {
         setMode(newMode);
@@ -55,7 +75,7 @@ export default function LoginPage() {
                     body: JSON.stringify({ email, password }),
                 });
                 const data = await res.json();
-                if (!res.ok) throw new Error(data.error || t('auth.loginError') || 'Login failed');
+                if (!res.ok) throw new Error(mapApiError(data.error, 'auth.loginError'));
 
                 if (typeof window !== 'undefined') {
                     window.dispatchEvent(new CustomEvent('auth-state-changed'));
@@ -70,11 +90,11 @@ export default function LoginPage() {
                     body: JSON.stringify({ email, password }),
                 });
                 const data = await res.json();
-                if (!res.ok) throw new Error(data.error || t('auth.registerError') || 'Registration failed');
+                if (!res.ok) throw new Error(mapApiError(data.error, 'auth.registerError'));
 
                 if (data.needsEmailConfirmation) {
                     setSuccessMessage(
-                        data.message || t('auth.emailConfirmationSent') || 'Registration successful! Please check your email to verify.'
+                        locale === 'zh' ? t('auth.emailConfirmationSent') : (data.message || t('auth.emailConfirmationSent'))
                     );
                     setMode('login');
                     return;
@@ -92,10 +112,10 @@ export default function LoginPage() {
                     body: JSON.stringify({ email }),
                 });
                 const data = await res.json();
-                if (!res.ok) throw new Error(data.error || 'Failed to send reset email');
+                if (!res.ok) throw new Error(mapApiError(data.error, 'auth.sendResetEmailError'));
 
                 setSuccessMessage(
-                    data.message || t('auth.resetEmailSent') || 'Password reset link sent! Check your inbox.'
+                    locale === 'zh' ? t('auth.resetEmailSent') : (data.message || t('auth.resetEmailSent'))
                 );
             } else if (mode === 'resend') {
                 const res = await fetch('/api/auth/resend-confirmation', {
@@ -104,14 +124,14 @@ export default function LoginPage() {
                     body: JSON.stringify({ email }),
                 });
                 const data = await res.json();
-                if (!res.ok) throw new Error(data.error || 'Failed to resend confirmation');
+                if (!res.ok) throw new Error(mapApiError(data.error, 'auth.resendConfirmationError'));
 
                 setSuccessMessage(
-                    data.message || t('auth.confirmationEmailSent') || 'Verification email resent! Check your inbox.'
+                    locale === 'zh' ? t('auth.confirmationEmailSent') : (data.message || t('auth.confirmationEmailSent'))
                 );
             }
         } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : 'Something went wrong');
+            setError(mapCatchError(err));
         } finally {
             setLoading(false);
         }
@@ -216,7 +236,7 @@ export default function LoginPage() {
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}
                                     className="absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300 transition-colors p-1"
-                                    aria-label="Toggle password visibility"
+                                    aria-label={t('auth.togglePasswordVisibility')}
                                 >
                                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                 </button>
@@ -245,7 +265,7 @@ export default function LoginPage() {
                                     type="button"
                                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                                     className="absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300 transition-colors p-1"
-                                    aria-label="Toggle confirm password visibility"
+                                    aria-label={t('auth.toggleConfirmPasswordVisibility')}
                                 >
                                     {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                 </button>
@@ -267,7 +287,7 @@ export default function LoginPage() {
 
                     <button
                         type="submit"
-                        disabled={loading}
+                        disabled={loading || !mounted}
                         className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3.5 rounded-xl transition-all transform active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2"
                     >
                         {loading ? (

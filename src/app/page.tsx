@@ -57,7 +57,7 @@ export default function HomePage() {
                         <Link href="/quiz" className="hover:text-white transition-colors">{t('nav.aiDictation')}</Link>
                         <Link href="/ambient" className="hover:text-white transition-colors flex items-center gap-1">
                             <span>{t('nav.ambient')}</span>
-                            <span className="px-1.5 py-0.5 rounded-full bg-white/10 text-[10px] text-white/80">4 Seasons</span>
+                            <span className="px-1.5 py-0.5 rounded-full bg-white/10 text-[10px] text-white/80">{t('nav.ambientBadge')}</span>
                         </Link>
                         <Link href="/passport" className="hover:text-white transition-colors">{t('nav.passport')}</Link>
                         <Link href="/model" className="hover:text-white transition-colors flex items-center gap-1">
@@ -134,7 +134,7 @@ export default function HomePage() {
                         className="inline-flex items-center gap-3 px-5 py-2 rounded-full bg-black/60 border border-white/15 text-xs font-mono text-white/70 hover:text-white cursor-pointer transition-all group backdrop-blur-md"
                     >
                         <span className="text-white/40">$</span>
-                        <span>open https://wordlink.study</span>
+                        <span>{t('terminalHint')}</span>
                         {copied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} className="text-white/40 group-hover:text-white" />}
                     </div>
                 </div>
@@ -277,7 +277,7 @@ export default function HomePage() {
                 <div className="max-w-xl mx-auto mb-10 opacity-75">
                     <img
                         src="/images/fluid-ribbon.png"
-                        alt="Liquid chrome wave"
+                        alt={t('ribbonAlt')}
                         loading="lazy"
                         decoding="async"
                         className="w-full h-auto mx-auto object-contain max-h-32"
@@ -315,7 +315,7 @@ export default function HomePage() {
                             L
                         </div>
                         <span className="font-serif italic text-white/80 text-sm" style={{ fontFamily: "'Instrument Serif', serif" }}>Lexiverse 语宙</span>
-                        <span>· © 2026 AI for SDGs Project · UNU Macau</span>
+                        <span>{t('footer.copyright')}</span>
                     </div>
 
                     <div className="flex items-center gap-6">

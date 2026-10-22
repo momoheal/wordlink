@@ -34,6 +34,8 @@ export async function GET(request: NextRequest) {
         email: data.user.email,
         role: 'user',
         preferredLanguage: data.user.user_metadata?.preferredLanguage || 'zh',
+        plan: 'free',
+        planExpiresAt: null,
       });
     }
 

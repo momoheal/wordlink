@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import { useTranslations, useLocale } from 'next-intl';
 import { ArrowLeft, Plus, Trash2, Save } from 'lucide-react';
 
 interface Word {
@@ -18,6 +19,8 @@ interface Library {
 }
 
 export default function EditLibraryPage() {
+  const t = useTranslations('libraryEdit');
+  const locale = useLocale();
   const router = useRouter();
   const params = useParams();
   const libraryId = params.id as string;
@@ -78,10 +81,10 @@ export default function EditLibraryPage() {
         setWords([...words, data.word]);
         setNewWord('');
       } else {
-        setError(data.error || 'Failed to add word');
+        setError(locale === 'zh' ? t('addFailed') : (data.error || t('addFailed')));
       }
     } catch (error) {
-      setError('Failed to add word');
+      setError(t('addFailed'));
     }
   };
 
@@ -108,7 +111,7 @@ export default function EditLibraryPage() {
   const handleBatchDelete = async () => {
     if (selectedWords.size === 0) return;
 
-    if (!confirm(`Delete ${selectedWords.size} selected words?`)) return;
+    if (!confirm(t('confirmDelete', { count: selectedWords.size }))) return;
 
     try {
       const response = await fetch(`/api/user/libraries/${libraryId}/words`, {
@@ -161,7 +164,7 @@ export default function EditLibraryPage() {
   if (loading || !library) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
-        <div className="text-xl">Loading...</div>
+        <div className="text-xl">{t('loading')}</div>
       </div>
     );
   }
@@ -178,7 +181,7 @@ export default function EditLibraryPage() {
             <ArrowLeft size={24} />
           </button>
           <div className="flex-1">
-            <h1 className="text-3xl font-bold">Edit Library</h1>
+            <h1 className="text-3xl font-bold">{t('title')}</h1>
           </div>
           <button
             onClick={handleUpdateLibrary}
@@ -186,7 +189,7 @@ export default function EditLibraryPage() {
             className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 rounded-lg flex items-center gap-2 transition-colors"
           >
             <Save size={20} />
-            {saving ? 'Saving...' : 'Save'}
+            {saving ? t('saving') : t('save')}
           </button>
         </div>
 
@@ -194,7 +197,7 @@ export default function EditLibraryPage() {
         <div className="bg-gray-900 rounded-lg p-6 mb-8 border border-gray-800">
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">Name</label>
+              <label className="block text-sm font-medium mb-2">{t('nameLabel')}</label>
               <input
                 type="text"
                 value={library.name}
@@ -206,7 +209,7 @@ export default function EditLibraryPage() {
             </div>
             <div>
               <label className="block text-sm font-medium mb-2">
-                Description
+                {t('descriptionLabel')}
               </label>
               <textarea
                 value={library.description || ''}
@@ -222,14 +225,14 @@ export default function EditLibraryPage() {
 
         {/* Add Word */}
         <div className="bg-gray-900 rounded-lg p-6 mb-8 border border-gray-800">
-          <h2 className="text-xl font-semibold mb-4">Add New Word</h2>
+          <h2 className="text-xl font-semibold mb-4">{t('addNewWord')}</h2>
           <div className="flex gap-3">
             <input
               type="text"
               value={newWord}
               onChange={(e) => setNewWord(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && handleAddWord()}
-              placeholder="Enter a word..."
+              placeholder={t('wordPlaceholder')}
               className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg"
             />
             <button
@@ -237,7 +240,7 @@ export default function EditLibraryPage() {
               className="px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center gap-2 transition-colors"
             >
               <Plus size={20} />
-              Add
+              {t('add')}
             </button>
           </div>
           {error && <div className="text-red-500 text-sm mt-2">{error}</div>}
@@ -247,14 +250,14 @@ export default function EditLibraryPage() {
         <div className="bg-gray-900 rounded-lg p-6 border border-gray-800">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">
-              Words ({words.length})
+              {t('wordsCount', { count: words.length })}
             </h2>
             <div className="flex gap-3">
               <button
                 onClick={toggleSelectAll}
                 className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm transition-colors"
               >
-                {selectedWords.size === words.length ? 'Deselect All' : 'Select All'}
+                {selectedWords.size === words.length ? t('deselectAll') : t('selectAll')}
               </button>
               {selectedWords.size > 0 && (
                 <button
@@ -262,7 +265,7 @@ export default function EditLibraryPage() {
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm flex items-center gap-2 transition-colors"
                 >
                   <Trash2 size={16} />
-                  Delete ({selectedWords.size})
+                  {t('deleteCount', { count: selectedWords.size })}
                 </button>
               )}
             </div>

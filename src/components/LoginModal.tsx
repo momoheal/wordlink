@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { X, Lock, Mail, ArrowLeft, Send, Eye, EyeOff } from 'lucide-react';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 
 interface LoginModalProps {
     isOpen: boolean;
@@ -14,6 +14,7 @@ type AuthMode = 'login' | 'register' | 'forgot' | 'resend';
 
 export default function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps) {
     const t = useTranslations();
+    const locale = useLocale();
     const [mode, setMode] = useState<AuthMode>('login');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -23,6 +24,23 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginMod
     const [error, setError] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
     const [loading, setLoading] = useState(false);
+
+    const mapApiError = (apiError: string | undefined, fallbackKey: string): string => {
+        const e = (apiError || '').toLowerCase();
+        if (e.includes('invalid login credentials') || e.includes('invalid email or password')) return t('auth.invalidCredentials');
+        if (e.includes('email not confirmed')) return t('auth.emailNotConfirmed');
+        if (e.includes('too many') || e.includes('rate limit')) return t('auth.tooManyAttempts');
+        if (e.includes('profile')) return t('auth.profileUnavailable');
+        if (apiError && locale !== 'zh') return apiError;
+        return t(fallbackKey);
+    };
+
+    const mapCatchError = (err: unknown): string => {
+        if (!(err instanceof Error)) return t('auth.genericError');
+        const m = err.message.toLowerCase();
+        if (m.includes('failed to fetch') || m.includes('networkerror') || m.includes('network request')) return t('auth.networkError');
+        return err.message;
+    };
 
     if (!isOpen) return null;
 
@@ -61,7 +79,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginMod
                     body: JSON.stringify({ email, password }),
                 });
                 const data = await res.json();
-                if (!res.ok) throw new Error(data.error || t('auth.loginError') || 'Login failed');
+                if (!res.ok) throw new Error(mapApiError(data.error, 'auth.loginError'));
 
                 window.dispatchEvent(new CustomEvent('auth-state-changed'));
                 onLoginSuccess(data.user);
@@ -74,11 +92,11 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginMod
                     body: JSON.stringify({ email, password }),
                 });
                 const data = await res.json();
-                if (!res.ok) throw new Error(data.error || t('auth.registerError') || 'Registration failed');
+                if (!res.ok) throw new Error(mapApiError(data.error, 'auth.registerError'));
 
                 if (data.needsEmailConfirmation) {
                     setSuccessMessage(
-                        data.message || t('auth.emailConfirmationSent') || 'Registration successful! Please check your email to verify.'
+                        locale === 'zh' ? t('auth.emailConfirmationSent') : (data.message || t('auth.emailConfirmationSent'))
                     );
                     setMode('login');
                     return;
@@ -94,10 +112,10 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginMod
                     body: JSON.stringify({ email }),
                 });
                 const data = await res.json();
-                if (!res.ok) throw new Error(data.error || 'Failed to send reset email');
+                if (!res.ok) throw new Error(mapApiError(data.error, 'auth.sendResetEmailError'));
 
                 setSuccessMessage(
-                    data.message || t('auth.resetEmailSent') || 'Password reset link sent! Check your inbox.'
+                    locale === 'zh' ? t('auth.resetEmailSent') : (data.message || t('auth.resetEmailSent'))
                 );
             } else if (mode === 'resend') {
                 const res = await fetch('/api/auth/resend-confirmation', {
@@ -106,14 +124,14 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginMod
                     body: JSON.stringify({ email }),
                 });
                 const data = await res.json();
-                if (!res.ok) throw new Error(data.error || 'Failed to resend confirmation');
+                if (!res.ok) throw new Error(mapApiError(data.error, 'auth.resendConfirmationError'));
 
                 setSuccessMessage(
-                    data.message || t('auth.confirmationEmailSent') || 'Verification email resent! Check your inbox.'
+                    locale === 'zh' ? t('auth.confirmationEmailSent') : (data.message || t('auth.confirmationEmailSent'))
                 );
             }
         } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : 'Something went wrong');
+            setError(mapCatchError(err));
         } finally {
             setLoading(false);
         }
@@ -207,7 +225,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginMod
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}
                                     className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300 transition-colors p-1"
-                                    aria-label="Toggle password visibility"
+                                    aria-label={t('auth.togglePasswordVisibility')}
                                 >
                                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                                 </button>
@@ -236,7 +254,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginMod
                                     type="button"
                                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                                     className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300 transition-colors p-1"
-                                    aria-label="Toggle confirm password visibility"
+                                    aria-label={t('auth.toggleConfirmPasswordVisibility')}
                                 >
                                     {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                                 </button>

@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { RotateCcw, AlertOctagon, Home } from 'lucide-react';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 
 export default function Error({
   error,
@@ -11,6 +12,7 @@ export default function Error({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const t = useTranslations('errors');
   useEffect(() => {
     console.error('Next.js Page Level Error caught:', error);
   }, [error]);
@@ -36,9 +38,9 @@ export default function Error({
         </div>
 
         <div className="space-y-2">
-          <h2 className="text-xl font-extrabold text-white tracking-tight">Lexiverse hit a snag</h2>
+          <h2 className="text-xl font-extrabold text-white tracking-tight">{t('snagTitle')}</h2>
           <p className="text-xs text-neutral-400 leading-relaxed max-w-sm mx-auto">
-            {error.message || 'An uncaught rendering error occurred and has been contained.'}
+            {error.message || t('snagDesc')}
           </p>
           {error.digest && (
             <p className="text-[10px] font-mono text-neutral-600">Digest: {error.digest}</p>
@@ -52,14 +54,14 @@ export default function Error({
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-lg shadow-blue-900/30 transition-all hover:scale-105"
           >
             <RotateCcw size={14} />
-            <span>Clear cache &amp; reload</span>
+            <span>{t('clearCacheReload')}</span>
           </button>
           <Link
             href="/study"
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 hover:text-white text-xs font-semibold transition-all"
           >
             <Home size={14} />
-            <span>Back to home</span>
+            <span>{t('backToHome')}</span>
           </Link>
         </div>
       </div>

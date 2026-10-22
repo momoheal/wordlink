@@ -66,10 +66,11 @@ export default function ModuleAccordion({
   isDragOver,
 }: ModuleAccordionProps) {
   const t = useTranslations('modules');
+  const tm = useTranslations('misc.moduleAccordion');
   const Icon = icons[meta.icon as keyof typeof icons] || BookOpen;
   const contentId = `word-module-${meta.id}-content`;
   const title = translated(t, `${meta.id}.name`, moduleLabel(meta));
-  const badge = meta.badgeText;
+  const badge = meta.badgeKey ? translated(t, meta.badgeKey, '') : '';
 
   return (
     <section
@@ -87,7 +88,7 @@ export default function ModuleAccordion({
           {onDragStart && (
             <div
               className="cursor-grab text-neutral-600 hover:text-neutral-300 active:cursor-grabbing p-0.5 rounded transition-colors"
-              title="Drag to reorder / 拖动以调整模块顺序"
+              title={tm('dragReorder')}
             >
               <GripVertical size={16} />
             </div>

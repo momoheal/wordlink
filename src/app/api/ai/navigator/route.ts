@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { getSession, ensureLocalUser } from '@/lib/auth';
 import {
@@ -99,6 +100,12 @@ export async function POST(request: NextRequest) {
     const session = await getSession();
     if (session) await ensureLocalUser(session);
 
+    // AI 生成文案跟随界面语言（NEXT_LOCALE cookie），登录用户回退 session 偏好
+    const cookieLang = (await cookies()).get('NEXT_LOCALE')?.value;
+    const lang = cookieLang === 'zh' || cookieLang === 'en'
+        ? cookieLang
+        : (session?.preferredLanguage === 'zh' ? 'zh' : 'en');
+
     let body: { target?: string };
     try {
         body = await request.json();
@@ -129,14 +136,17 @@ export async function POST(request: NextRequest) {
         }
 
         // ---- AI explanation (cached per path) ------------------------------
-        const cacheKey = agentCacheKey('navigator', { target, path });
+        const cacheKey = agentCacheKey('navigator', { target, path, lang });
         let explanation = await readAgentCache<string>('navigator', cacheKey);
         if (!explanation) {
             try {
                 const template = await loadPrompt('navigator.txt');
+                const systemPrompt = template + (lang === 'zh'
+                    ? '\n\nWrite the coaching brief in Simplified Chinese (简体中文).'
+                    : '');
                 explanation = await completeDeepseek(
                     [
-                        { role: 'system', content: template },
+                        { role: 'system', content: systemPrompt },
                         {
                             role: 'user',
                             content: `Target word: ${target}\nLearner's known seed words (sample): ${seeds.slice(0, 15).join(', ')}\nComputed path: ${JSON.stringify(path)}`,

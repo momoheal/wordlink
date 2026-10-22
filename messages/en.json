@@ -16,7 +16,8 @@
     "filter": "Filter",
     "reset": "Reset",
     "submit": "Submit",
-    "logout": "Logout"
+    "logout": "Logout",
+    "space": "Space"
   },
   "nav": {
     "home": "Home",
@@ -103,7 +104,11 @@
     "adverb": "Adverb",
     "comparative": "Comparative",
     "superlative": "Superlative",
-    "collinsStars": "Collins Stars"
+    "collinsStars": "Collins Stars",
+    "relatedWords": "Related Words",
+    "loadingNotes": "Loading notes...",
+    "collinsStarsLabel": "Collins: {stars} stars",
+    "goBack": "Go back"
   },
   "quiz": {
     "title": "Word Fission Quiz",
@@ -232,7 +237,9 @@
     "sdgPassport": "SDG 4 Learning Passport",
     "sdgPassportSub": "XAI-explainable learning record · CEFR six-dimension radar",
     "blindSpotNavigator": "Cognitive Blind-spot Navigator",
-    "blindSpotNavigatorSub": "Shortest activation chain in the word graph · AI hop-by-hop explanations"
+    "blindSpotNavigatorSub": "Shortest activation chain in the word graph · AI hop-by-hop explanations",
+    "loadFailed": "Failed to load dashboard data. Please make sure you are logged in.",
+    "cellTooltip": "{word} on {date}: Score {score}"
   },
   "settings": {
     "title": "Settings",
@@ -327,7 +334,8 @@
       "name": "Root and affix building blocks",
       "description": "Heuristically split prefixes, roots and suffixes with longest-match rules.",
       "heuristic": "Heuristic morphology",
-      "empty": "No reliable structure data"
+      "empty": "No reliable structure data",
+      "badge": "Morphology"
     },
     "youtube_clips": {
       "name": "YouTube authentic clips",
@@ -338,12 +346,14 @@
       "expandToLoad": "Expand to load third-party usage clips",
       "readyFallback": "YouGlish is ready; open the usage clips in a new window.",
       "error": "The video widget is temporarily unavailable.",
-      "openExternal": "Open in YouGlish"
+      "openExternal": "Open in YouGlish",
+      "badge": "YouGlish"
     },
     "visual_mnemonic": {
       "name": "AI visual mnemonic",
       "description": "A stable slot reserved for future visual memory content.",
-      "placeholder": "Visual mnemonics are not enabled yet. This slot keeps a fixed height."
+      "placeholder": "Visual mnemonics are not enabled yet. This slot keeps a fixed height.",
+      "badge": "Visual AI"
     },
     "community_notes": {
       "name": "Community notes",
@@ -356,7 +366,8 @@
       "error": "Learning records are temporarily unavailable.",
       "mastery": "Current mastery",
       "realData": "Only backend records are shown; no second client-side memory algorithm is computed.",
-      "empty": "No learning record yet"
+      "empty": "No learning record yet",
+      "badge": "SM-2"
     },
     "ghost": {
       "label": "More modules"
@@ -375,7 +386,7 @@
     "emailPlaceholder": "Enter your email",
     "passwordPlaceholder": "Enter password",
     "keyCode": "Key Code",
-    "keyCodePlaceholder": "wordlink_code_placeholder",
+    "keyCodePlaceholder": "Enter your key code",
     "processing": "Processing...",
     "createAccount": "Create Account",
     "signIn": "Sign In",
@@ -410,7 +421,18 @@
     "passwordUpdated": "Password updated successfully! Redirecting...",
     "backToLogin": "Back to Sign In",
     "resetPasswordTitle": "Set New Password",
-    "resetPasswordSubtitle": "Enter the new password for your account"
+    "resetPasswordSubtitle": "Enter the new password for your account",
+    "sendResetEmailError": "Failed to send reset email",
+    "resendConfirmationError": "Failed to resend confirmation",
+    "genericError": "Something went wrong",
+    "updatePasswordError": "Failed to update password",
+    "togglePasswordVisibility": "Toggle password visibility",
+    "toggleConfirmPasswordVisibility": "Toggle confirm password visibility",
+    "invalidCredentials": "Invalid email or password",
+    "emailNotConfirmed": "Email not confirmed — please check your inbox for the verification link",
+    "tooManyAttempts": "Too many attempts. Please try again later",
+    "profileUnavailable": "Account profile failed to load. Please refresh and retry",
+    "networkError": "Network error. Check your connection and try again"
   },
   "ai": {
     "chat": "AI Chat",
@@ -522,7 +544,10 @@
     "time": "Time",
     "word": "Word",
     "type": "Type",
-    "result": "Result"
+    "result": "Result",
+    "notLoggedIn": "You are not logged in. Please log in first.",
+    "loadFailed": "Failed to load history (HTTP {status}).",
+    "networkError": "Network error. Please try again."
   },
   "layout": {
     "openSidebar": "Open Sidebar",
@@ -542,7 +567,8 @@
     "logoutFailed": "Logout failed",
     "wordNotFound": "Word \"{word}\" not found in database.",
     "welcomeBack": "Welcome back, {name}!",
-    "navigator": "Navigator"
+    "navigator": "Navigator",
+    "upgradePro": "Upgrade Pro"
   },
   "passport": {
     "back": "Back to Dashboard",
@@ -563,7 +589,10 @@
     "narrativeUnavailable": "AI narrative not generated yet (data radar still available without an AI key).",
     "onboardingTitle": "Your passport awaits its first stamp",
     "onboardingDesc": "Your Learning Passport is powered by real learning data: complete a quiz or explore a few words and your six-dimension radar and CEFR level will light up automatically.",
-    "startQuiz": "Take your first quiz"
+    "startQuiz": "Take your first quiz",
+    "unSdg": "United Nations · SDG 4",
+    "narrativeTitle": "XAI Narrative",
+    "footerCredit": "Lexiverse · AI for SDGs Global Youth Innovation Competition 2026"
   },
   "navigator": {
     "back": "Back to Dashboard",
@@ -574,7 +603,9 @@
     "searching": "Searching the shortest activation path…",
     "error": "Navigation failed temporarily. Please try again.",
     "notFound": "No activation route found within 4 hops. Try another target.",
-    "routeFound": "Cognitive activation route found"
+    "routeFound": "Cognitive activation route found",
+    "routeStats": "{hops} hops · {seeds} seeds",
+    "coachingBrief": "AI Coaching Brief"
   },
   "appRail": {
     "study": "Star Workbench",
@@ -590,5 +621,100 @@
     "productTour": "Product Tour",
     "home": "Home",
     "logout": "Log out"
+  },
+  "pricing": {
+    "backHome": "Back to app",
+    "title": "Lexiverse Pro",
+    "subtitle": "Unlimited AI conversations and story generation — turn everything you read into vocabulary you keep.",
+    "freePlan": "Free plan · daily AI limits apply",
+    "proUntil": "Pro · valid until {date}",
+    "proLifetime": "Pro · lifetime access",
+    "pro_monthly": {
+      "name": "Pro Monthly",
+      "desc": "All Pro features for 30 days"
+    },
+    "pro_yearly": {
+      "name": "Pro Yearly",
+      "desc": "All Pro features for 365 days",
+      "badge": "Save 20%"
+    },
+    "perMonth": "/ month",
+    "perYear": "/ year",
+    "buy": "Pay with Alipay",
+    "extend": "Renew / Extend",
+    "loginToBuy": "Log in to purchase",
+    "redirecting": "Redirecting to Alipay…",
+    "orderFailed": "Could not create the order. Please try again.",
+    "notConfigured": "Payment is not configured yet. Please check back later.",
+    "benefitsTitle": "What Pro unlocks",
+    "benefit1": "Unlimited AI tutor conversations",
+    "benefit2": "Unlimited AI story generation",
+    "benefit3": "All upcoming Pro features",
+    "benefit4": "Priority access to new models",
+    "freeLimits": "Free plan: {chat} AI chats and {stories} AI stories per day"
+  },
+  "pay": {
+    "return": {
+      "checking": "Confirming your payment…",
+      "checkingDesc": "Please wait — we are verifying the result with Alipay.",
+      "success": "Payment successful",
+      "successDesc": "Lexiverse Pro is now active on your account.",
+      "startUsing": "Start using Pro",
+      "pending": "Still confirming",
+      "pendingDesc": "Alipay has not confirmed the result yet. Check again in a moment.",
+      "recheck": "Check again",
+      "noOrder": "No order information found in this link.",
+      "error": "Could not verify the payment status.",
+      "orderNo": "Order {no}",
+      "goHome": "Back to app"
+    }
+  },
+  "paywall": {
+    "quotaTitle": "Daily free limit reached",
+    "quotaBody": "You've used {used}/{limit} free AI chats today. Upgrade to Pro for unlimited access.",
+    "quotaBodyPlain": "Daily free AI quota reached ({limit}/day). Upgrade to Pro for unlimited access at /pricing.",
+    "quotaAmbient": "You've used {used}/{limit} free AI stories today. Upgrade to Pro for unlimited generation.",
+    "upgrade": "Upgrade to Pro"
+  },
+  "admin": {
+    "loading": "Loading...",
+    "title": "Admin Access",
+    "username": "Username",
+    "password": "Password",
+    "login": "Login",
+    "loginFailed": "Login failed",
+    "errorOccurred": "An error occurred",
+    "dashboardTitle": "Admin Dashboard",
+    "welcome": "Welcome, Administrator."
+  },
+  "libraryEdit": {
+    "loading": "Loading...",
+    "title": "Edit Library",
+    "nameLabel": "Name",
+    "descriptionLabel": "Description",
+    "addNewWord": "Add New Word",
+    "wordPlaceholder": "Enter a word...",
+    "add": "Add",
+    "wordsCount": "Words ({count})",
+    "selectAll": "Select All",
+    "deselectAll": "Deselect All",
+    "deleteCount": "Delete ({count})",
+    "saving": "Saving...",
+    "save": "Save",
+    "confirmDelete": "Delete {count} selected words?",
+    "addFailed": "Failed to add word"
+  },
+  "errors": {
+    "loading": "Loading…",
+    "notFoundTitle": "This page drifted off the star map",
+    "notFoundDesc": "The page you are looking for does not exist or has moved.",
+    "backToHome": "Back to home",
+    "openWorkbench": "Open workbench",
+    "snagTitle": "Lexiverse hit a snag",
+    "snagDesc": "An uncaught rendering error occurred and has been contained.",
+    "clearCacheReload": "Clear cache & reload",
+    "recoveringTitle": "Lexiverse is recovering",
+    "recoveringDesc": "A rendering error was caught. Click below to reset and recover.",
+    "resetRecover": "Reset & recover"
   }
 }

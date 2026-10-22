@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSession } from '@/lib/auth';
+import { getSession, isPro } from '@/lib/auth';
+import { checkDailyQuota, quotaExceededResponse, recordUsage } from '@/lib/quota';
 import { rateLimit, clientIp, tooManyRequests } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
@@ -55,6 +56,12 @@ export async function POST(request: NextRequest) {
 
         const userGate = rateLimit(`ambient-gen-user:${session.id}`, 6, 5 * 60_000);
         if (!userGate.ok) return tooManyRequests(userGate.retryAfterSec);
+
+        // 付费墙：免费用户每日额度，Pro 不限
+        if (!isPro(session)) {
+            const quota = await checkDailyQuota(session.id, 'ambientGenerate');
+            if (!quota.allowed) return quotaExceededResponse(quota, 'ambientGenerate');
+        }
 
         const body: GenerateRequest = await request.json();
         const level = body.level || 'B1';
@@ -143,6 +150,9 @@ Respond with ONLY valid JSON in exactly this shape (no markdown fences, no comme
                 wordCount,
             },
         });
+
+        // AmbientArticle 是全局共享库、无用户归属字段，额度按 UsageLog 记
+        await recordUsage(session.id, 'ambientGenerate');
 
         return NextResponse.json({
             id: created.id,

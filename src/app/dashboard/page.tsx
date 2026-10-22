@@ -181,7 +181,7 @@ export default function DashboardPage() {
             })
             .catch(err => {
                 console.error(err);
-                setError('Failed to load dashboard data. Please make sure you are logged in.');
+                setError(t('dashboard.loadFailed'));
             })
             .finally(() => setLoading(false));
     };
@@ -565,7 +565,7 @@ export default function DashboardPage() {
                                                 <div
                                                     key={date}
                                                     className={`${isMobile ? 'w-10' : 'w-16'} flex-shrink-0 h-6 rounded-sm ${activity ? color : 'bg-neutral-800/30'}`}
-                                                    title={`${stat.word} on ${date}: Score ${score}`}
+                                                    title={t('dashboard.cellTooltip', { word: stat.word, date, score })}
                                                 />
                                             );
                                         })}

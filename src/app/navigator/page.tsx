@@ -143,7 +143,7 @@ export default function NavigatorPage() {
                             <div className="mb-4 flex items-center justify-between text-xs text-neutral-500">
                                 <span>{t('routeFound')}</span>
                                 <span>
-                                    {result.hops} hop{result.hops === 1 ? '' : 's'} · {result.knownSeedCount} seeds
+                                    {t('routeStats', { hops: result.hops ?? 0, seeds: result.knownSeedCount ?? 0 })}
                                 </span>
                             </div>
                             <div className="flex flex-wrap items-center gap-y-3">
@@ -176,7 +176,7 @@ export default function NavigatorPage() {
                         {result.explanation && (
                             <div className="rounded-xl border border-neutral-800 bg-neutral-900/40 p-6">
                                 <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-widest text-cyan-400">
-                                    <Sparkles className="h-3.5 w-3.5" /> AI Coaching Brief
+                                    <Sparkles className="h-3.5 w-3.5" /> {t('coachingBrief')}
                                 </div>
                                 {renderMarkdown(result.explanation)}
                             </div>

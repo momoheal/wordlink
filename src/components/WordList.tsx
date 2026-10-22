@@ -160,7 +160,7 @@ export default function WordList({ onWordSelect, selectedWord, isSidebarCollapse
 
                 // If searching, use global search
                 if (searchQuery) {
-                    url = `/api/words?query=${encodeURIComponent(searchQuery)}&includeDefinitions=${showChinese}`;
+                    url = `/api/words?query=${encodeURIComponent(searchQuery)}&includeDefinitions=${showChinese}&slim=1`;
                 }
                 // If in library view, don't fetch words yet
                 else if (viewMode === 'libraries') {
@@ -172,9 +172,9 @@ export default function WordList({ onWordSelect, selectedWord, isSidebarCollapse
                     // Check if it's a user library (path starts with "user:")
                     if (currentPath.startsWith('user:')) {
                         const libraryId = currentPath.replace('user:', '');
-                        url = `/api/user/libraries/${libraryId}/words?groupIndex=${selectedGroupIndex}&groupSize=${groupSize}&includeDefinitions=${showChinese}`;
+                        url = `/api/user/libraries/${libraryId}/words?groupIndex=${selectedGroupIndex}&groupSize=${groupSize}&includeDefinitions=${showChinese}&slim=1`;
                     } else {
-                        url = `/api/library-words?path=${encodeURIComponent(currentPath)}&groupIndex=${selectedGroupIndex}&groupSize=${groupSize}&includeDefinitions=${showChinese}`;
+                        url = `/api/library-words?path=${encodeURIComponent(currentPath)}&groupIndex=${selectedGroupIndex}&groupSize=${groupSize}&includeDefinitions=${showChinese}&slim=1`;
                     }
                 }
 

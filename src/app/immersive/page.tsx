@@ -8,10 +8,12 @@ import WordDetail from '@/components/WordDetail';
 import ImmersiveToggle from '@/components/ImmersiveToggle';
 import FissionGraph from '@/components/FissionGraph';
 import { useSettings } from '@/context/SettingsContext';
+import { useTranslations } from 'next-intl';
 import { cachedFetch, cacheDelete } from '@/lib/client-cache';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function ImmersivePage() {
+    const t = useTranslations('misc.immersivePage');
     const searchParams = useSearchParams();
     const initialWord = searchParams.get('word');
 
@@ -169,7 +171,7 @@ export default function ImmersivePage() {
             {/* Word List Window */}
             {mounted && showList && (
                 <DraggableContainer
-                    title="Word Library"
+                    title={t('wordLibrary')}
                     initialPosition={listPos}
                     initialSize={listSize}
                     onClose={() => setShowList(false)}
@@ -188,7 +190,7 @@ export default function ImmersivePage() {
             {/* Word Detail Window */}
             {mounted && showDetail && (
                 <DraggableContainer
-                    title={currentWord || "Word Details"}
+                    title={currentWord || t('wordDetails')}
                     initialPosition={detailPos}
                     initialSize={detailSize}
                     onClose={() => setShowDetail(false)}
@@ -201,7 +203,7 @@ export default function ImmersivePage() {
                                     ? 'text-white hover:bg-white/20'
                                     : 'text-white/20 cursor-not-allowed'
                                     }`}
-                                title="Back"
+                                title={t('back')}
                             >
                                 <ChevronLeft size={16} />
                             </button>
@@ -212,7 +214,7 @@ export default function ImmersivePage() {
                                     ? 'text-white hover:bg-white/20'
                                     : 'text-white/20 cursor-not-allowed'
                                     }`}
-                                title="Forward"
+                                title={t('forward')}
                             >
                                 <ChevronRight size={16} />
                             </button>
@@ -236,7 +238,7 @@ export default function ImmersivePage() {
                         onClick={() => setShowList(true)}
                         className="px-4 py-2 bg-black/60 backdrop-blur-md text-white rounded-lg hover:bg-black/80 transition-colors border border-white/10 text-sm font-medium"
                     >
-                        Show Library
+                        {t('showLibrary')}
                     </button>
                 )}
                 {!showDetail && (
@@ -244,7 +246,7 @@ export default function ImmersivePage() {
                         onClick={() => setShowDetail(true)}
                         className="px-4 py-2 bg-black/60 backdrop-blur-md text-white rounded-lg hover:bg-black/80 transition-colors border border-white/10 text-sm font-medium"
                     >
-                        Show Details
+                        {t('showDetails')}
                     </button>
                 )}
             </div>

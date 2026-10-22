@@ -3,7 +3,10 @@
     "common": {
       "backToHome": "返回主界面",
       "backToPrevious": "返回上一级",
-      "retryGroup": "重新测验本组"
+      "retryGroup": "重新测验本组",
+      "noUnfamiliar": "没有待复习的生词，干得漂亮！",
+      "noCustomWords": "没有为自定义测验选择单词。",
+      "loadFailed": "测验数据加载失败，请重试。"
     },
     "menu": {
       "title": "智能认知测验中心",

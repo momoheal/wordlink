@@ -13,7 +13,7 @@ export default function ArchitectureSection() {
     return (
         <section id="architecture" className="relative border-t border-white/[0.06] bg-black/85 backdrop-blur-md px-6 py-24 md:px-12 lg:px-16">
             <div className="mx-auto max-w-6xl">
-                <p className="text-xs uppercase tracking-[0.3em] text-cyan-200/60">Architecture</p>
+                <p className="text-xs uppercase tracking-[0.3em] text-cyan-200/60">{t('eyebrow')}</p>
                 <h2 className="mt-4 text-3xl font-medium text-white md:text-4xl">
                     {t('titleA')}
                     <span className="text-white/40">{t('titleB')}</span>

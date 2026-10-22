@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { getSession, ensureLocalUser } from '@/lib/auth';
 import {
@@ -70,6 +71,12 @@ export async function GET() {
     }
     await ensureLocalUser(session);
     const userId = session.id;
+
+    // AI 叙事语言跟随界面语言（NEXT_LOCALE cookie），session 偏好兜底
+    const cookieLang = (await cookies()).get('NEXT_LOCALE')?.value;
+    const lang = cookieLang === 'zh' || cookieLang === 'en'
+        ? cookieLang
+        : (session.preferredLanguage === 'zh' ? 'zh' : 'en');
 
     try {
         const now = new Date();
@@ -156,7 +163,7 @@ export async function GET() {
 
         // ---- AI narrative (cached per stats signature; cefr included so a
         // recalibration invalidates stale narratives) -------------------------
-        const cacheKey = agentCacheKey('passport', { u: userId, cefr, ...metrics });
+        const cacheKey = agentCacheKey('passport', { u: userId, cefr, lang, ...metrics });
         let narrative = await readAgentCache<string>('passport', cacheKey);
         if (!narrative) {
             try {
@@ -164,7 +171,8 @@ export async function GET() {
                 const filled = template
                     .replace(/\{\{cefr\}\}/g, cefr)
                     .replace(/\{\{metricsJson\}\}/g, JSON.stringify(metrics))
-                    .replace(/\{\{radarJson\}\}/g, JSON.stringify(radar));
+                    .replace(/\{\{radarJson\}\}/g, JSON.stringify(radar))
+                    + (lang === 'zh' ? '\n\nWrite the narrative in Simplified Chinese (简体中文).' : '');
                 narrative = await completeDeepseek(
                     [
                         { role: 'system', content: filled },

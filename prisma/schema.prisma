@@ -45,14 +45,18 @@ model User {
   avatar            String?
   role              String              @default("user")
   preferredLanguage String              @default("zh")
+  plan              String              @default("free")
+  planExpiresAt     DateTime?
   dailyGoal         Int                 @default(50)
   streakDays        Int                 @default(0)
   lastActiveAt      DateTime?
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @default(now())
   CheckinLog        CheckinLog[]
+  PaymentOrder      PaymentOrder[]
   QuizRecord        QuizRecord[]
   StudyPlan         StudyPlan?
+  UsageLog          UsageLog[]
   UserLibrary       UserLibrary[]
   UserWordState     UserWordState[]
   WordVisit         WordVisit[]
@@ -327,5 +331,38 @@ model AmbientArticle {
   createdAt DateTime @default(now())
 
   @@index([level])
+  @@schema("LPT_english")
+}
+
+// ===== 支付宝收款：支付订单 =====
+model PaymentOrder {
+  id            String    @id @default(cuid())
+  outTradeNo    String    @unique
+  userId        String
+  product       String
+  subject       String
+  amount        Decimal   @db.Decimal(10, 2)
+  status        String    @default("pending") // pending / paid / closed
+  alipayTradeNo String?
+  paidAt        DateTime?
+  rawNotify     Json?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @default(now())
+  User          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([createdAt])
+  @@schema("LPT_english")
+}
+
+// ===== 免费额度用量记录（无法从业务表按用户归属统计的 AI 能力） =====
+model UsageLog {
+  id        String   @id @default(cuid())
+  userId    String
+  kind      String
+  createdAt DateTime @default(now())
+  User      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind, createdAt])
   @@schema("LPT_english")
 }

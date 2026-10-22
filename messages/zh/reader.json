@@ -3,7 +3,7 @@
     "hub": {
       "tagline": "Context Reading Hub · 语境文库 (RME-V5)",
       "subtitle": "下一篇文章，就是你的单词复习。在母语语境中沉浸精读，点击生词裂变星图，一键推入四季车窗屏保。",
-      "home": "Home",
+      "home": "首页",
       "ambientMode": "进入屏保听读",
       "aiGenerate": "✨ AI 生成专属短文",
       "topPick": "今日记忆自愈首推 · RME-V5 算法匹配度 {score}%",
@@ -27,7 +27,9 @@
         "autumn": "🍁 金秋",
         "winter": "❄️ 寒冬",
         "ai": "🤖 AI 定制"
-      }
+      },
+      "title": "文章与真实语境",
+      "backHomeAria": "返回首页"
     },
     "modal": {
       "desc": "DeepSeek 将自动整合你当前遗忘临界区生词，为你创作专属 90~120 词语境故事。",
@@ -35,7 +37,8 @@
       "themePlaceholder": "留空自动匹配，或输入如：autumn wind, old bookstore",
       "levelLabel": "语言等级 / Level",
       "generating": "DeepSeek 正在编织语境故事…",
-      "generate": "生成并进入精读"
+      "generate": "生成并进入精读",
+      "title": "AI 故事工坊"
     },
     "detail": {
       "loading": "正在解构全息语境…",
@@ -77,7 +80,8 @@
       "ask": "提问",
       "aiAck": "AI 助教已收到",
       "aiError": "解答失败，请稍后再试",
-      "aiPrompt": "在以下英语语境中：\n\"{sentence}\"\n\n请解答：{question}"
+      "aiPrompt": "在以下英语语境中：\n\"{sentence}\"\n\n请解答：{question}",
+      "definitions": "释义"
     },
     "audio": {
       "restart": "从头播放",

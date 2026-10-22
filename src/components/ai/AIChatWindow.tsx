@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { X, Send, Sparkles, ChevronDown, Loader2, Minus, GripVertical, Square, Plus, MessageSquare, BookOpen, FolderOpen, Trash2, PanelLeftClose, PanelLeft } from 'lucide-react';
+import Link from 'next/link';
+import { X, Send, Sparkles, ChevronDown, Loader2, Minus, GripVertical, Square, Plus, MessageSquare, BookOpen, FolderOpen, Trash2, PanelLeftClose, PanelLeft, Crown } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useAI } from './AIProvider';
@@ -11,6 +12,8 @@ import { useLocale, useTranslations } from 'next-intl';
 interface Message {
     role: 'user' | 'assistant';
     content: string;
+    kind?: 'paywall';
+    quota?: { used?: number; limit?: number };
 }
 
 interface LocalSession {
@@ -296,7 +299,17 @@ export default function AIChatWindow() {
                 credentials: 'include'
             });
 
-            if (!response.ok) throw new Error('Failed to get response');
+            if (!response.ok) {
+                if (response.status === 402) {
+                    const data = await response.json().catch(() => null);
+                    updateSessionMessages(sessionId!, [
+                        ...newMessages,
+                        { role: 'assistant', content: '', kind: 'paywall', quota: { used: data?.used, limit: data?.limit } },
+                    ]);
+                    return;
+                }
+                throw new Error('Failed to get response');
+            }
 
             const reader = response.body?.getReader();
             const decoder = new TextDecoder();
@@ -618,11 +631,33 @@ export default function AIChatWindow() {
                     <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
                         {messages.map((msg, idx) => (
                             <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`max-w-[85%] p-3 rounded-2xl backdrop-blur-sm ${msg.role === 'user' ? 'bg-purple-500/30 text-white' : 'bg-white/10 text-white/90'}`}>
-                                    <div className="prose prose-invert prose-sm max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                                {msg.kind === 'paywall' ? (
+                                    <div className="max-w-[85%] p-4 rounded-2xl border border-amber-300/30 bg-gradient-to-br from-amber-500/15 to-purple-500/10 backdrop-blur-sm">
+                                        <div className="flex items-center gap-2 text-amber-200 text-sm font-medium">
+                                            <Crown size={14} />
+                                            <span>{t('paywall.quotaTitle')}</span>
+                                        </div>
+                                        <p className="mt-1.5 text-xs leading-relaxed text-white/65">
+                                            {t('paywall.quotaBody', {
+                                                used: msg.quota?.used ?? '–',
+                                                limit: msg.quota?.limit ?? '–',
+                                            })}
+                                        </p>
+                                        <Link
+                                            href="/pricing"
+                                            className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-1.5 text-xs font-semibold text-black transition-all hover:bg-white/90 active:scale-95"
+                                        >
+                                            <Sparkles size={12} />
+                                            {t('paywall.upgrade')}
+                                        </Link>
                                     </div>
-                                </div>
+                                ) : (
+                                    <div className={`max-w-[85%] p-3 rounded-2xl backdrop-blur-sm ${msg.role === 'user' ? 'bg-purple-500/30 text-white' : 'bg-white/10 text-white/90'}`}>
+                                        <div className="prose prose-invert prose-sm max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         ))}
                         {streamingContent && (

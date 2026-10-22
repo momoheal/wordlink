@@ -69,8 +69,10 @@
     },
     "passport": {
       "title": "Your context is growing.",
-      "desc": "Open your Learning Passport to see your cognitive radar and growth."
-    }
+      "desc": "Open your Learning Passport to see your cognitive radar and growth.",
+      "badge": "Learning Passport"
+    },
+    "eyebrow": "Mission control"
   },
   "mobile": {
     "tabs": {
@@ -82,7 +84,13 @@
     },
     "startQuiz": "Start Quiz",
     "showNav": "Show navigation bar",
-    "hideNav": "Hide navigation bar"
+    "hideNav": "Hide navigation bar",
+    "filters": "Filters",
+    "wordListLabel": "Word List",
+    "wordCount": "{count} words",
+    "cancelSelection": "Cancel selection",
+    "askAiSelected": "Ask AI about selected words",
+    "startQuizSelected": "Start quiz with selected words"
   },
   "backToHome": {
     "label": "Home",

@@ -13,8 +13,14 @@ import { useTranslations, useLocale } from 'next-intl';
 
 // Lazy load heavy markdown rendering and note components
 const ReactMarkdown = dynamic(() => import('react-markdown'), { ssr: false });
+
+function NotesLoadingFallback() {
+    const t = useTranslations('wordDetail');
+    return <div className="text-neutral-500 text-sm py-4">{t('loadingNotes')}</div>;
+}
+
 const WordNote = dynamic(() => import('@/components/WordNote'), {
-    loading: () => <div className="text-neutral-500 text-sm py-4">Loading notes...</div>,
+    loading: () => <NotesLoadingFallback />,
 });
 
 // Small plugins - import normally
@@ -93,7 +99,7 @@ export default function MobileWordDetailPage() {
                 .then((data) => {
                     if (disposed) return;
                     if (!data) {
-                        setContent('# Word not found');
+                        setContent(`# ${t('wordDetail.wordNotFound')}`);
                         setChineseData(null);
                         return;
                     }
@@ -104,7 +110,7 @@ export default function MobileWordDetailPage() {
                 })
                 .catch((reason: unknown) => {
                     if (reason instanceof DOMException && reason.name === 'AbortError') return;
-                    if (!disposed) setContent('# Error loading content');
+                    if (!disposed) setContent(`# ${t('wordDetail.errorLoading')}`);
                 })
                 .finally(() => {
                     if (!disposed) setLoading(false);
@@ -207,7 +213,7 @@ export default function MobileWordDetailPage() {
         const stars = parseInt(collins);
         if (isNaN(stars) || stars <= 0) return null;
         return (
-            <div className="flex items-center gap-0.5" title={`Collins: ${stars} stars`}>
+            <div className="flex items-center gap-0.5" title={t('wordDetail.collinsStarsLabel', { stars })}>
                 {[...Array(stars)].map((_, i) => (
                     <svg key={i} className="w-4 h-4 text-yellow-500 fill-current" viewBox="0 0 24 24">
                         <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
@@ -247,7 +253,7 @@ export default function MobileWordDetailPage() {
                 <button
                     onClick={() => router.back()}
                     className="p-2 -ml-2 rounded-lg active:bg-neutral-800 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
-                    aria-label="Go back"
+                    aria-label={t('wordDetail.goBack')}
                 >
                     <ArrowLeft size={22} className="text-neutral-300" />
                 </button>
@@ -256,7 +262,7 @@ export default function MobileWordDetailPage() {
                     <button
                         onClick={() => playAudio('US')}
                         className="p-2 rounded-lg active:bg-neutral-800 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
-                        aria-label="US pronunciation"
+                        aria-label={t('wordDetail.usPronunciation')}
                     >
                         <span className="text-[10px] font-bold text-blue-400 mr-0.5">US</span>
                         <Volume2 size={18} className="text-neutral-400" />
@@ -264,7 +270,7 @@ export default function MobileWordDetailPage() {
                     <button
                         onClick={() => playAudio('UK')}
                         className="p-2 rounded-lg active:bg-neutral-800 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
-                        aria-label="UK pronunciation"
+                        aria-label={t('wordDetail.ukPronunciation')}
                     >
                         <span className="text-[10px] font-bold text-red-400 mr-0.5">UK</span>
                         <Volume2 size={18} className="text-neutral-400" />
@@ -273,7 +279,7 @@ export default function MobileWordDetailPage() {
                         <button
                             onClick={() => openWithWord(decodedWord)}
                             className="p-2 rounded-lg bg-gradient-to-r from-purple-600 to-blue-600 active:from-purple-500 active:to-blue-500 min-w-[44px] min-h-[44px] flex items-center justify-center"
-                            aria-label="Ask AI"
+                            aria-label={t('wordDetail.askAI')}
                         >
                             <Sparkles size={18} className="text-white" />
                         </button>
@@ -374,7 +380,7 @@ export default function MobileWordDetailPage() {
                     <section className="px-4 py-4 border-t border-neutral-800">
                         <h3 className="text-base font-semibold text-white mb-3 flex items-center gap-2">
                             <span className="w-1 h-5 bg-green-500 rounded-full"></span>
-                            Word Forms
+                            {t('wordDetail.wordForms')}
                         </h3>
                         <div className="flex flex-wrap gap-2">
                             {Object.entries(chineseData.forms).map(([key, value]) => (
@@ -392,7 +398,7 @@ export default function MobileWordDetailPage() {
                     <section className="px-4 py-4 border-t border-neutral-800">
                         <h3 className="text-base font-semibold text-white mb-3 flex items-center gap-2">
                             <span className="w-1 h-5 bg-blue-500 rounded-full"></span>
-                            Detailed Definitions
+                            {t('wordDetail.detailedDefinitions')}
                         </h3>
                         <div className="space-y-3">
                             {chineseData.definitions.map((def, idx) => (
@@ -417,7 +423,7 @@ export default function MobileWordDetailPage() {
                     <section className="px-4 py-4 border-t border-neutral-800">
                         <h3 className="text-base font-semibold text-white mb-3 flex items-center gap-2">
                             <span className="w-1 h-5 bg-purple-500 rounded-full"></span>
-                            Comparisons
+                            {t('wordDetail.comparisons')}
                         </h3>
                         <div className="space-y-3">
                             {chineseData.comparison.map((comp, idx) => (
@@ -438,7 +444,7 @@ export default function MobileWordDetailPage() {
                     <section className="px-4 py-4 border-t border-neutral-800">
                         <h3 className="text-base font-semibold text-white mb-3 flex items-center gap-2">
                             <span className="w-1 h-5 bg-cyan-500 rounded-full"></span>
-                            Related Words
+                            {t('wordDetail.relatedWords')}
                         </h3>
                         <div className="flex flex-wrap gap-2">
                             {relatedWords.map((rw) => (

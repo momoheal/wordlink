@@ -21,7 +21,8 @@
       "edgeSub": "Qwen2.5-1.5B + domain-fine-tuned LoRA (full SFT + DPO pipeline)",
       "edgePoint1": "· WebGPU 4-bit quantization, ~950MB — <b>offline forever</b> after the first download",
       "edgePoint2": "· Student data <b>never leaves the browser</b> (GDPR / COPPA friendly)",
-      "edgePoint3": "· Zero marginal inference cost → equally usable in underdeveloped regions"
+      "edgePoint3": "· Zero marginal inference cost → equally usable in underdeveloped regions",
+      "eyebrow": "Architecture"
     },
     "training": {
       "titleA": "WordLink-Edge, a 1.5B model born for teaching,",
@@ -123,7 +124,9 @@
           "model": "Teacher upper bound (reference answers)",
           "note": "Fine-tuning catches up with it"
         }
-      }
+      },
+      "eyebrow": "Model",
+      "pipelineEyebrow": "Pipeline"
     },
     "gallery": {
       "titleA": "Eleven feature modules,",
@@ -134,49 +137,61 @@
       "features": {
         "workspace": {
           "title": "Workspace",
-          "desc": "Your post-login learning hub: lexicon, study modes, star map and quiz entries one screen away, with day/night themes that follow your habits"
+          "desc": "Your post-login learning hub: lexicon, study modes, star map and quiz entries one screen away, with day/night themes that follow your habits",
+          "name": "Workspace"
         },
         "study": {
           "title": "Star-Map Workbench",
-          "desc": "Lexicon outline × word details × fission star map, three panes in sync: select any word and its synonym network unfolds instantly in a force-directed star map"
+          "desc": "Lexicon outline × word details × fission star map, three panes in sync: select any word and its synonym network unfolds instantly in a force-directed star map",
+          "name": "Study"
         },
         "navigator": {
           "title": "Cognitive Navigator",
-          "desc": "Gap analysis between your mastered vocabulary and target exam, generating a personalized learning path so every minute counts"
+          "desc": "Gap analysis between your mastered vocabulary and target exam, generating a personalized learning path so every minute counts",
+          "name": "Navigator"
         },
         "quiz": {
           "title": "Smart Quiz",
-          "desc": "Three question types — multiple choice, spelling, recall — generated intelligently with a memory-strength model; every answer updates your forgetting curve"
+          "desc": "Three question types — multiple choice, spelling, recall — generated intelligently with a memory-strength model; every answer updates your forgetting curve",
+          "name": "Quiz"
         },
         "immersive": {
           "title": "Immersive Star Map",
-          "desc": "A full-screen force-directed star map with draggable floating panels — your library and word details hover above the galaxy, and every node click fissions further"
+          "desc": "A full-screen force-directed star map with draggable floating panels — your library and word details hover above the galaxy, and every node click fissions further",
+          "name": "Immersive"
         },
         "ambient": {
           "title": "Four-Season Ambient",
-          "desc": "Real scenes of spring, summer, autumn and winter plus natural soundscapes synthesized in real time with Web Audio — words drift by with the passing landscape"
+          "desc": "Real scenes of spring, summer, autumn and winter plus natural soundscapes synthesized in real time with Web Audio — words drift by with the passing landscape",
+          "name": "Ambient"
         },
         "read": {
           "title": "Context Reading",
-          "desc": "A graded article stream: click any word while reading for instant definitions, save it to your wordbook with one tap — reading is reviewing"
+          "desc": "A graded article stream: click any word while reading for instant definitions, save it to your wordbook with one tap — reading is reviewing",
+          "name": "Read"
         },
         "passport": {
           "title": "Learning Passport",
-          "desc": "AI translates all your learning data into an explainable English credential narrative + cognitive radar, making learning outcomes visible"
+          "desc": "AI translates all your learning data into an explainable English credential narrative + cognitive radar, making learning outcomes visible",
+          "name": "Passport"
         },
         "report": {
           "title": "Learning Report",
-          "desc": "Streaks, accuracy trends, vocabulary mastery distribution and recent activity — your progress at a glance"
+          "desc": "Streaks, accuracy trends, vocabulary mastery distribution and recent activity — your progress at a glance",
+          "name": "Report"
         },
         "libraries": {
           "title": "My Libraries",
-          "desc": "Built-in syllabus wordbooks plus custom libraries in any combination — grouped study, import and export on demand"
+          "desc": "Built-in syllabus wordbooks plus custom libraries in any combination — grouped study, import and export on demand",
+          "name": "Libraries"
         },
         "settings": {
           "title": "Settings",
-          "desc": "Interface language, sound, display and learning preferences all adjustable, with seamless Chinese-English bilingual switching"
+          "desc": "Interface language, sound, display and learning preferences all adjustable, with seamless Chinese-English bilingual switching",
+          "name": "Settings"
         }
-      }
+      },
+      "eyebrow": "Product Tour"
     },
     "home": {
       "nav": {
@@ -186,7 +201,8 @@
         "ambient": "Ambient",
         "passport": "XAI Passport",
         "model": "Model",
-        "login": "Log in"
+        "login": "Log in",
+        "ambientBadge": "4 Seasons"
       },
       "getStarted": "Get Started",
       "hero": {
@@ -224,8 +240,11 @@
       },
       "footer": {
         "passport": "Passport",
-        "login": "Login"
-      }
+        "login": "Login",
+        "copyright": "· © 2026 AI for SDGs Project · UNU Macau"
+      },
+      "terminalHint": "open https://wordlink.study",
+      "ribbonAlt": "Liquid chrome wave"
     }
   }
 }

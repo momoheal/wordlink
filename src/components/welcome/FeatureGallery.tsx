@@ -28,7 +28,7 @@ export default function FeatureGallery() {
     return (
         <section id="features-gallery" className="relative border-t border-white/[0.06] bg-black/85 backdrop-blur-md px-6 py-24 md:px-12 lg:px-16">
             <div className="mx-auto max-w-6xl">
-                <p className="text-xs uppercase tracking-[0.3em] text-cyan-200/60">Product Tour</p>
+                <p className="text-xs uppercase tracking-[0.3em] text-cyan-200/60">{t('eyebrow')}</p>
                 <h2 className="mt-4 text-3xl font-medium text-white md:text-4xl">
                     {t('titleA')}
                     <span className="text-white/40">{t('titleB')}</span>
@@ -56,7 +56,7 @@ export default function FeatureGallery() {
                                 />
                             </div>
                             <div className={i % 2 ? 'md:order-1 md:text-right' : ''}>
-                                <p className="text-xs uppercase tracking-[0.25em] text-cyan-200/60">{f.name}</p>
+                                <p className="text-xs uppercase tracking-[0.25em] text-cyan-200/60">{t(`features.${f.id}.name`)}</p>
                                 <h3 className="mt-2 text-2xl font-medium text-white">{title}</h3>
                                 <p className="mt-3 text-sm leading-relaxed text-white/50">{t(`features.${f.id}.desc`)}</p>
                                 <p className="mt-4 text-xs text-cyan-200/70 opacity-0 transition duration-300 group-hover:opacity-100">

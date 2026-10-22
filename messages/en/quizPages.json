@@ -3,7 +3,10 @@
     "common": {
       "backToHome": "Back to Home",
       "backToPrevious": "Back",
-      "retryGroup": "Retry This Group"
+      "retryGroup": "Retry This Group",
+      "noUnfamiliar": "No unfamiliar words found! Great job!",
+      "noCustomWords": "No words selected for custom quiz.",
+      "loadFailed": "Failed to load quiz data. Please try again."
     },
     "menu": {
       "title": "Smart Cognitive Quiz Center",

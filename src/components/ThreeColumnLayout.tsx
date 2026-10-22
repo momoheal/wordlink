@@ -7,7 +7,7 @@ import { useTranslations } from 'next-intl';
 import WordList from './WordList';
 import WordDetail from './WordDetail';
 import PanelFissionGraph from './PanelFissionGraph';
-import { User, LogOut, BrainCircuit, Clock, Settings } from 'lucide-react';
+import { User, LogOut, BrainCircuit, Clock, Settings, Crown, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import LoginModal from './LoginModal';
 import ImmersiveToggle from './ImmersiveToggle';
@@ -39,6 +39,7 @@ function ThreeColumnLayoutContent() {
         email?: string;
         username?: string;
         role?: string;
+        isPro?: boolean;
     };
 
     const [selectedWord, setSelectedWord] = useState<string | null>(null);
@@ -294,6 +295,20 @@ function ThreeColumnLayoutContent() {
                                 <User size={12} />
                                 <span>{user.email || user.username}</span>
                             </div>
+                            {user.isPro ? (
+                                <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-300 bg-amber-400/10 border border-amber-300/30 px-1.5 py-0.5 rounded">
+                                    <Crown size={10} />
+                                    Pro
+                                </span>
+                            ) : (
+                                <Link
+                                    href="/pricing"
+                                    className="flex items-center gap-1 text-[10px] font-medium text-amber-200/80 hover:text-amber-200 transition-colors"
+                                >
+                                    <Sparkles size={10} />
+                                    {t('layout.upgradePro')}
+                                </Link>
+                            )}
                             <button
                                 onClick={handleLogout}
                                 className="text-neutral-500 hover:text-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"

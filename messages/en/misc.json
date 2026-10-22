@@ -43,6 +43,21 @@
       "zoomIn": "Zoom+",
       "zoomOut": "Zoom-",
       "fit": "Fit"
+    },
+    "container": {
+      "minimize": "Minimize",
+      "close": "Close"
+    },
+    "immersivePage": {
+      "wordLibrary": "Word Library",
+      "wordDetails": "Word Details",
+      "back": "Back",
+      "forward": "Forward",
+      "showLibrary": "Show Library",
+      "showDetails": "Show Details"
+    },
+    "moduleAccordion": {
+      "dragReorder": "Drag to reorder"
     }
   }
 }

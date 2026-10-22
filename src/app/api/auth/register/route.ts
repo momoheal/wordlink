@@ -42,6 +42,8 @@ export async function POST(request: Request) {
                 email,
                 role: 'user',
                 preferredLanguage,
+                plan: 'free',
+                planExpiresAt: null,
             });
         }
 
@@ -51,6 +53,8 @@ export async function POST(request: Request) {
             email,
             role: 'user',
             preferredLanguage,
+            plan: 'free',
+            planExpiresAt: null,
         };
 
         return NextResponse.json({

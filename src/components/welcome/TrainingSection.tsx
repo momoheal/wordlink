@@ -84,7 +84,7 @@ export default function TrainingSection() {
     return (
         <section id="training" className="relative border-t border-white/[0.06] bg-[#05080c]/90 backdrop-blur-md px-6 py-24 md:px-12 lg:px-16">
             <div className="mx-auto max-w-6xl">
-                <p className="text-xs uppercase tracking-[0.3em] text-cyan-200/60">Model</p>
+                <p className="text-xs uppercase tracking-[0.3em] text-cyan-200/60">{t('eyebrow')}</p>
                 <h2 className="mt-4 text-3xl font-medium text-white md:text-4xl">
                     {t('titleA')}
                     <span className="text-white/40">{t('titleB')}</span>
@@ -214,7 +214,7 @@ export default function TrainingSection() {
                 </div>
 
                 {/* ===== 流水线 ===== */}
-                <p className="mt-16 text-xs uppercase tracking-[0.3em] text-cyan-200/60">Pipeline</p>
+                <p className="mt-16 text-xs uppercase tracking-[0.3em] text-cyan-200/60">{t('pipelineEyebrow')}</p>
                 <h3 className="mt-3 text-2xl font-medium text-white md:text-3xl">
                     {t('pipelineTitle')}
                 </h3>

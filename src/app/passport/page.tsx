@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { Award, Printer, Loader2, Fingerprint } from 'lucide-react';
 
 interface RadarPoint {
@@ -35,6 +35,7 @@ interface PassportPayload {
 
 /** Lightweight dependency-free SVG radar chart. */
 function RadarChart({ points }: { points: RadarPoint[] }) {
+    const locale = useLocale();
     const size = 320;
     const cx = size / 2;
     const cy = size / 2;
@@ -78,7 +79,7 @@ function RadarChart({ points }: { points: RadarPoint[] }) {
                         fontSize="11"
                         fill="#a1a1aa"
                     >
-                        {p.label || p.labelZh} · {p.score}
+                        {locale === 'zh' ? (p.labelZh || p.label) : p.label} · {p.score}
                     </text>
                 );
             })}
@@ -88,6 +89,7 @@ function RadarChart({ points }: { points: RadarPoint[] }) {
 
 export default function PassportPage() {
     const t = useTranslations('passport');
+    const locale = useLocale();
 
     // 鏅鸿兘杩斿洖锛氫粠鍝潵鍥炲摢鍘伙紙dashboard/涓诲簲鐢ㄥ潎鍙繘鍏ワ級锛屾棤鏉ヨ矾鏃跺洖涓荤晫闈?
     const [data, setData] = useState<PassportPayload | null>(null);
@@ -189,7 +191,7 @@ export default function PassportPage() {
                         {/* Certificate header */}
                         <div className="border-b border-violet-900/30 px-8 py-6 text-center">
                             <div className="mb-2 flex items-center justify-center gap-2 text-xs uppercase tracking-[0.3em] text-violet-400">
-                                <Fingerprint className="h-4 w-4" /> United Nations · SDG 4
+                                <Fingerprint className="h-4 w-4" /> {t('unSdg')}
                             </div>
                             <h1 className="text-2xl font-bold tracking-wide">{t('title')}</h1>
                             <p className="mt-1 text-xs text-neutral-500">{t('subtitle')}</p>
@@ -226,7 +228,7 @@ export default function PassportPage() {
                         {data.narrative ? (
                             <div className="border-t border-neutral-800/70 px-8 py-6">
                                 <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-widest text-violet-400">
-                                    <Award className="h-4 w-4" /> XAI Narrative
+                                    <Award className="h-4 w-4" /> {t('narrativeTitle')}
                                 </div>
                                 {renderNarrative(data.narrative)}
                             </div>
@@ -235,8 +237,8 @@ export default function PassportPage() {
                         )}
 
                         <div className="border-t border-neutral-800/70 px-8 py-4 text-center text-[11px] text-neutral-600">
-                            Lexiverse · AI for SDGs Global Youth Innovation Competition 2026 ·{' '}
-                            {new Date(data.generatedAt).toLocaleDateString()}
+                            {t('footerCredit')} ·{' '}
+                            {new Date(data.generatedAt).toLocaleDateString(locale === 'zh' ? 'zh-CN' : 'en-US')}
                         </div>
                     </div>
                 )}

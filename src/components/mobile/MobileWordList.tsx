@@ -30,6 +30,7 @@ interface WordWithData {
 export default function MobileWordList() {
   const router = useRouter();
   const t = useTranslations('mobile');
+  const tw = useTranslations('wordList');
   const { groupSize, showChinese, showScore } = useSettings();
   const { openWithWordGroup } = useAI();
   const parentRef = useRef<HTMLDivElement>(null);
@@ -126,16 +127,16 @@ export default function MobileWordList() {
       try {
         let url = '/api/words';
         if (searchQuery) {
-          url = `/api/words?query=${encodeURIComponent(searchQuery)}&includeDefinitions=${showChinese}`;
+          url = `/api/words?query=${encodeURIComponent(searchQuery)}&includeDefinitions=${showChinese}&slim=1`;
         } else if (viewMode === 'libraries') {
           setLoading(false);
           return;
         } else if (currentPath) {
           if (currentPath.startsWith('user:')) {
             const id = currentPath.replace('user:', '');
-            url = `/api/user/libraries/${id}/words?groupIndex=${selectedGroupIndex}&groupSize=${groupSize}&includeDefinitions=${showChinese}`;
+            url = `/api/user/libraries/${id}/words?groupIndex=${selectedGroupIndex}&groupSize=${groupSize}&includeDefinitions=${showChinese}&slim=1`;
           } else {
-            url = `/api/library-words?path=${encodeURIComponent(currentPath)}&groupIndex=${selectedGroupIndex}&groupSize=${groupSize}&includeDefinitions=${showChinese}`;
+            url = `/api/library-words?path=${encodeURIComponent(currentPath)}&groupIndex=${selectedGroupIndex}&groupSize=${groupSize}&includeDefinitions=${showChinese}&slim=1`;
           }
         }
         const res = await fetch(url);
@@ -388,7 +389,7 @@ export default function MobileWordList() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 w-5 h-5" />
           <input
             type="text"
-            placeholder="Search words..."
+            placeholder={tw('searchPlaceholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-neutral-900 text-base text-neutral-200 pl-10 pr-4 py-3 rounded-xl border border-neutral-800 focus:outline-none focus:border-neutral-600"
@@ -411,7 +412,7 @@ export default function MobileWordList() {
               onClick={() => setFiltersOpen(!filtersOpen)}
               className="flex items-center text-sm text-neutral-500 min-h-[44px] px-2"
             >
-              Filters {filtersOpen ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />}
+              {t('filters')} {filtersOpen ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />}
             </button>
           </div>
 
@@ -422,9 +423,9 @@ export default function MobileWordList() {
                 onChange={(e) => setSortBy(e.target.value as any)}
                 className="w-full bg-neutral-900 text-neutral-300 text-sm border border-neutral-800 rounded-lg p-2.5"
               >
-                <option value="default">Default Order</option>
-                <option value="familiarity_asc">Familiarity ↑</option>
-                <option value="familiarity_desc">Familiarity ↓</option>
+                <option value="default">{tw('defaultOrder')}</option>
+                <option value="familiarity_asc">{tw('familiarityAsc')}</option>
+                <option value="familiarity_desc">{tw('familiarityDesc')}</option>
               </select>
               {groups.length > 0 && (
                 <select
@@ -449,7 +450,7 @@ export default function MobileWordList() {
             className="flex items-center text-sm text-neutral-400 active:text-white min-h-[48px]"
           >
             <ChevronLeft className="w-5 h-5 mr-1" />
-            Back
+            {tw('back')}
           </button>
         </div>
       )}
@@ -499,19 +500,19 @@ export default function MobileWordList() {
                     </span>
                     {item.source === 'user' && (
                       <span className="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded flex-shrink-0">
-                        My Library
+                        {tw('myLibrary')}
                       </span>
                     )}
                   </div>
                   <span className="text-xs text-neutral-500">
-                    {item.type === 'directory' ? 'Folder' : item.source === 'user' ? `${item.wordCount || 0} words` : 'Word List'}
+                    {item.type === 'directory' ? tw('folder') : item.source === 'user' ? t('wordCount', { count: item.wordCount || 0 }) : t('wordListLabel')}
                   </span>
                 </div>
               </button>
             ))}
             {libraryItems.length === 0 && (
               <div className="text-center text-neutral-500 text-sm py-12">
-                Empty directory
+                {tw('emptyDirectory')}
               </div>
             )}
           </div>
@@ -594,27 +595,27 @@ export default function MobileWordList() {
       {isSelectMode && selectedWords.size > 0 && (
         <div className="absolute bottom-6 right-4 flex flex-col items-end gap-2 z-20">
           <div className="bg-neutral-800 text-neutral-300 text-xs px-2.5 py-1 rounded-full">
-            {selectedWords.size} selected
+            {tw('selected', { count: selectedWords.size })}
           </div>
           <div className="flex gap-2">
             <button
               onClick={handleCancelSelect}
               className="w-11 h-11 rounded-full bg-neutral-800 flex items-center justify-center shadow-lg active:bg-neutral-700"
-              aria-label="Cancel selection"
+              aria-label={t('cancelSelection')}
             >
               <X className="w-5 h-5 text-neutral-300" />
             </button>
             <button
               onClick={handleAskAI}
               className="w-11 h-11 rounded-full bg-purple-600 flex items-center justify-center shadow-lg active:bg-purple-700"
-              aria-label="Ask AI about selected words"
+              aria-label={t('askAiSelected')}
             >
               <MessageCircle className="w-5 h-5 text-white" />
             </button>
             <button
               onClick={handleStartQuiz}
               className="h-11 px-4 rounded-full bg-blue-600 flex items-center justify-center gap-1.5 shadow-lg active:bg-blue-700"
-              aria-label="Start quiz with selected words"
+              aria-label={t('startQuizSelected')}
             >
               <BookOpen className="w-4 h-4 text-white" />
               <span className="text-sm font-medium text-white">{t('startQuiz')}</span>

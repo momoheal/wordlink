@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import Link from 'next/link';
 import { ArrowRight, Globe, Mail, Sparkles, Youtube } from 'lucide-react';
+import { useLocale } from 'next-intl';
 import { MEDIA } from '@/lib/welcome-media';
 import { cachedFetch } from '@/lib/client-cache';
 
@@ -33,6 +34,7 @@ interface SessionUser {
 }
 
 export default function Hero() {
+  const locale = useLocale();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [email, setEmail] = useState('');
   const [user, setUser] = useState<SessionUser | null>(null);
@@ -238,8 +240,8 @@ export default function Hero() {
       <div className="relative z-10 flex justify-center gap-4 pb-12">
         {[
           { icon: Youtube, label: 'YouTube' },
-          { icon: Globe, label: 'Website' },
-          { icon: Mail, label: 'Email' },
+          { icon: Globe, label: locale === 'zh' ? '网站' : 'Website' },
+          { icon: Mail, label: locale === 'zh' ? '邮箱' : 'Email' },
         ].map(({ icon: Icon, label }) => (
           <button
             key={label}

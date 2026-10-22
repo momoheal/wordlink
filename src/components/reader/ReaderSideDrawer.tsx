@@ -26,6 +26,7 @@ export default function ReaderSideDrawer({
     onWidthChange?: (width: number) => void;
 }) {
     const t = useTranslations('reader.drawer');
+    const tp = useTranslations('paywall');
     const [word, setWord] = useState<string | undefined>(initialWord);
     const [tab, setTab] = useState<'fission' | 'grammar' | 'ai'>('fission');
     const [wordData, setWordData] = useState<WordDetails | null>(null);
@@ -163,7 +164,10 @@ export default function ReaderSideDrawer({
                     messages: [],
                 }),
             });
-            if (res.ok) {
+            if (res.status === 402) {
+                const data = await res.json().catch(() => null);
+                setAiReply(tp('quotaBodyPlain', { limit: data?.limit ?? '–' }));
+            } else if (res.ok) {
                 const data = await res.json();
                 setAiReply(data.reply || data.content || t('aiAck'));
             }
@@ -222,7 +226,7 @@ export default function ReaderSideDrawer({
                         </div>
                         {wordData?.meanings && wordData.meanings.length > 0 && (
                             <div className="mt-3 border-t border-white/10 pt-3">
-                                <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-200/70">Definitions</p>
+                                <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-200/70">{t('definitions')}</p>
                                 <div className="space-y-1.5 text-xs leading-relaxed text-white/65">
                                     {wordData.meanings.slice(0, 6).map((meaning, index) => <p key={`${meaning}-${index}`}><span className="mr-2 text-white/35">{index + 1}.</span>{meaning}</p>)}
                                 </div>

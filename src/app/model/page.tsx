@@ -187,7 +187,7 @@ export default async function ModelReportPage() {
             {/* 01 基座与任务 */}
             <SectionShell
                 id="task"
-                eyebrow="01 · Task"
+                eyebrow={t('sections.task')}
                 title={
                     <>
                         {t('task.title')}
@@ -210,7 +210,7 @@ export default async function ModelReportPage() {
             {/* 02 数据工程 */}
             <SectionShell
                 id="data"
-                eyebrow="02 · Data"
+                eyebrow={t('sections.data')}
                 title={
                     <>
                         {t('data.title')}
@@ -258,7 +258,7 @@ export default async function ModelReportPage() {
             {/* 03 SFT */}
             <SectionShell
                 id="sft"
-                eyebrow="03 · SFT"
+                eyebrow={t('sections.sft')}
                 title={
                     <>
                         {t('sft.title')}
@@ -273,7 +273,7 @@ export default async function ModelReportPage() {
             {/* 04 DPO */}
             <SectionShell
                 id="dpo"
-                eyebrow="04 · DPO"
+                eyebrow={t('sections.dpo')}
                 title={
                     <>
                         {t('dpo.title')}
@@ -307,7 +307,7 @@ export default async function ModelReportPage() {
             {/* 05 MPS 工程 */}
             <SectionShell
                 id="mps"
-                eyebrow="05 · Engineering"
+                eyebrow={t('sections.mps')}
                 title={
                     <>
                         {t('mps.title')}
@@ -341,7 +341,7 @@ export default async function ModelReportPage() {
             {/* 06 实测结果 */}
             <SectionShell
                 id="benchmark"
-                eyebrow="06 · Benchmark"
+                eyebrow={t('sections.bench')}
                 title={
                     <>
                         {t('bench.title')}
@@ -387,7 +387,7 @@ export default async function ModelReportPage() {
             {/* 07 产物 */}
             <SectionShell
                 id="artifacts"
-                eyebrow="07 · Artifacts"
+                eyebrow={t('sections.artifacts')}
                 title={
                     <>
                         {t('artifacts.title')}
@@ -420,7 +420,7 @@ export default async function ModelReportPage() {
             {/* 08 后续 */}
             <SectionShell
                 id="next"
-                eyebrow="08 · Roadmap"
+                eyebrow={t('sections.next')}
                 title={
                     <>
                         {t('next.title')}

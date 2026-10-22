@@ -22,7 +22,7 @@ export interface ModuleMeta {
   defaultOpen: boolean;
   minHeight: number;
   aspectRatio?: string;
-  badgeText?: string;
+  badgeKey?: string;
 }
 
 export interface WordModuleProps {
@@ -88,7 +88,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleMeta> = {
     tier: 1,
     defaultOpen: true,
     minHeight: 120,
-    badgeText: 'Morphology',
+    badgeKey: 'root_morphology.badge',
   },
   youtube_clips: {
     id: 'youtube_clips',
@@ -99,7 +99,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleMeta> = {
     defaultOpen: false,
     minHeight: 260,
     aspectRatio: '16 / 9',
-    badgeText: 'YouGlish',
+    badgeKey: 'youtube_clips.badge',
   },
   visual_mnemonic: {
     id: 'visual_mnemonic',
@@ -109,7 +109,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleMeta> = {
     tier: 1,
     defaultOpen: false,
     minHeight: 160,
-    badgeText: 'Visual AI',
+    badgeKey: 'visual_mnemonic.badge',
   },
   community_notes: {
     id: 'community_notes',
@@ -128,7 +128,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleMeta> = {
     tier: 1,
     defaultOpen: false,
     minHeight: 120,
-    badgeText: 'SM-2',
+    badgeKey: 'memory_dynamics.badge',
   },
 };
 

@@ -3,11 +3,12 @@
 import { useState } from 'react';
 import { Lock, CheckCircle2, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 
 export default function ResetPasswordPage() {
     const router = useRouter();
     const t = useTranslations();
+    const locale = useLocale();
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -15,6 +16,15 @@ export default function ResetPasswordPage() {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState(false);
     const [loading, setLoading] = useState(false);
+
+    const mapApiError = (apiError: string | undefined, fallbackKey: string): string => {
+        const e = (apiError || '').toLowerCase();
+        if (e.includes('invalid login credentials') || e.includes('invalid email or password')) return t('auth.invalidCredentials');
+        if (e.includes('email not confirmed')) return t('auth.emailNotConfirmed');
+        if (e.includes('too many') || e.includes('rate limit')) return t('auth.tooManyAttempts');
+        if (apiError && locale !== 'zh') return apiError;
+        return t(fallbackKey);
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -43,7 +53,7 @@ export default function ResetPasswordPage() {
             const data = await res.json();
 
             if (!res.ok) {
-                throw new Error(data.error || 'Failed to update password');
+                throw new Error(mapApiError(data.error, 'auth.updatePasswordError'));
             }
 
             setSuccess(true);
@@ -56,7 +66,9 @@ export default function ResetPasswordPage() {
                 router.refresh();
             }, 1800);
         } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : 'Failed to update password');
+            setError(err instanceof Error
+                ? (err.message.toLowerCase().includes('failed to fetch') ? t('auth.networkError') : err.message)
+                : t('auth.updatePasswordError'));
         } finally {
             setLoading(false);
         }
@@ -110,7 +122,7 @@ export default function ResetPasswordPage() {
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}
                                     className="absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300 transition-colors p-1"
-                                    aria-label="Toggle password visibility"
+                                    aria-label={t('auth.togglePasswordVisibility')}
                                 >
                                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                 </button>
@@ -136,7 +148,7 @@ export default function ResetPasswordPage() {
                                     type="button"
                                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                                     className="absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300 transition-colors p-1"
-                                    aria-label="Toggle confirm password visibility"
+                                    aria-label={t('auth.toggleConfirmPasswordVisibility')}
                                 >
                                     {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                 </button>

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { X, Minimize2 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 
 interface DraggableContainerProps {
     title: string;
@@ -26,6 +27,7 @@ export default function DraggableContainer({
     minHeight = 200,
     headerActions
 }: DraggableContainerProps) {
+    const t = useTranslations('misc.container');
     const [position, setPosition] = useState(initialPosition);
     const [size, setSize] = useState(initialSize);
     const [isMinimized, setIsMinimized] = useState(false);
@@ -179,11 +181,11 @@ export default function DraggableContainer({
                     <span className="text-sm font-semibold text-white/90 tracking-wide drop-shadow-md">{title}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                    <button onClick={toggleMinimize} className="p-1.5 hover:bg-white/10 rounded-full text-white/60 hover:text-white transition-colors" title="Minimize">
+                    <button onClick={toggleMinimize} className="p-1.5 hover:bg-white/10 rounded-full text-white/60 hover:text-white transition-colors" title={t('minimize')}>
                         <Minimize2 size={14} />
                     </button>
                     {onClose && (
-                        <button onClick={onClose} className="p-1.5 hover:bg-red-500/20 rounded-full text-white/60 hover:text-red-400 transition-colors" title="Close">
+                        <button onClick={onClose} className="p-1.5 hover:bg-red-500/20 rounded-full text-white/60 hover:text-red-400 transition-colors" title={t('close')}>
                             <X size={14} />
                         </button>
                     )}

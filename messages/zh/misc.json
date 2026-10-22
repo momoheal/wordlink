@@ -43,6 +43,21 @@
       "zoomIn": "放大",
       "zoomOut": "缩小",
       "fit": "适配屏幕"
+    },
+    "container": {
+      "minimize": "最小化",
+      "close": "关闭"
+    },
+    "immersivePage": {
+      "wordLibrary": "词库",
+      "wordDetails": "单词详情",
+      "back": "后退",
+      "forward": "前进",
+      "showLibrary": "显示词库",
+      "showDetails": "显示详情"
+    },
+    "moduleAccordion": {
+      "dragReorder": "拖动以调整模块顺序"
     }
   }
 }

@@ -73,7 +73,8 @@
       "libCet6": "六级 ",
       "libPostgrad": "考研 ",
       "libToefl": "托福 ",
-      "libSat": "SAT "
+      "libSat": "SAT",
+      "title": "播放列表与词库"
     },
     "picker": {
       "subtitle": "沉浸式听读 · 逐句朗读 · AI 个性化生成",
@@ -86,10 +87,19 @@
       "cancel": "取消",
       "creating": "正在创作…",
       "generateRead": "生成并阅读",
-      "loadingArticles": "加载文章…"
+      "loadingArticles": "加载文章…",
+      "title": "阅读书库",
+      "wordCount": "{count} 词",
+      "playing": "播放中"
     },
     "reading": {
       "opening": "正在打开阅读世界…"
+    },
+    "seasons": {
+      "spring": "春",
+      "summer": "夏",
+      "autumn": "秋",
+      "winter": "冬"
     }
   }
 }

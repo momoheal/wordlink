@@ -1002,18 +1002,29 @@ export async function getFissionData(targetWord: string): Promise<GraphData> {
     return result;
 }
 
-export async function getQuizDataForWords(words: string[]): Promise<{ word: string; chineseData: ChineseData | null }[]> {
+export async function getQuizDataForWords(words: string[], slim = false): Promise<{ word: string; chineseData: ChineseData | null }[]> {
     if (!words || words.length === 0) return [];
 
     try {
         const lowerWords = words.map(w => w.toLowerCase());
-        const dbWords = await prisma.words.findMany({
-            where: { word: { in: lowerWords } },
-            include: {
-                word_chinese: true,
-                word_ecdict: true,
-            },
-        });
+        // slim 模式只取列表渲染用到的字段，避免整段 definitions/comparison
+        // JSONB 随 6000+ 行一起出库、序列化、下发（15MB+ → ~1MB）
+        const dbWords = slim
+            ? await prisma.words.findMany({
+                where: { word: { in: lowerWords } },
+                select: {
+                    word: true,
+                    word_chinese: { select: { word: true, pronunciation: true, conciseDefinition: true } },
+                    word_ecdict: { select: { word: true, phonetic: true, translation: true, collins: true } },
+                },
+            })
+            : await prisma.words.findMany({
+                where: { word: { in: lowerWords } },
+                include: {
+                    word_chinese: true,
+                    word_ecdict: true,
+                },
+            });
 
         const wordMap = new Map<string, ChineseData>();
         for (const dbWord of dbWords) {
@@ -1024,9 +1035,9 @@ export async function getQuizDataForWords(words: string[]): Promise<{ word: stri
                     concise_definition: dbWord.word_ecdict?.translation
                         ? dbWord.word_ecdict.translation.replace(/\\n/g, ' ')
                         : dbWord.word_chinese.conciseDefinition || '',
-                    forms: (dbWord.word_chinese.forms as Record<string, string>) || {},
-                    definitions: (dbWord.word_chinese.definitions as unknown as ChineseDefinition[]) || [],
-                    comparison: (dbWord.word_chinese.comparison as unknown as ChineseComparison[]) || [],
+                    forms: slim ? {} : ((dbWord.word_chinese as { forms?: unknown }).forms as Record<string, string>) || {},
+                    definitions: slim ? [] : ((dbWord.word_chinese as { definitions?: unknown }).definitions as unknown as ChineseDefinition[]) || [],
+                    comparison: slim ? [] : ((dbWord.word_chinese as { comparison?: unknown }).comparison as unknown as ChineseComparison[]) || [],
                     phonetic: dbWord.word_ecdict?.phonetic || undefined,
                     collins: dbWord.word_ecdict?.collins || undefined,
                 });
@@ -1155,6 +1166,7 @@ export async function getUserLibraryWordsEnriched(
         // userLibrary.findUnique 校验与 userLibraryWord.findMany 查询；
         // 传入后 groupIndex/groupSize 不再生效（调用方负责已分页的结果）
         words: { id: string; word: string; sequence: number }[];
+        slim?: boolean;
     }
 ): Promise<EnrichedWord[]> {
     try {
@@ -1181,14 +1193,24 @@ export async function getUserLibraryWordsEnriched(
             words = await prisma.userLibraryWord.findMany(query);
         }
         const wordNames = words.map(w => w.word.toLowerCase());
+        const slim = prefetched?.slim === true;
 
-        const dbWords = await prisma.words.findMany({
-            where: { word: { in: wordNames } },
-            include: {
-                word_chinese: true,
-                word_ecdict: true,
-            },
-        });
+        const dbWords = slim
+            ? await prisma.words.findMany({
+                where: { word: { in: wordNames } },
+                select: {
+                    word: true,
+                    word_chinese: { select: { word: true, pronunciation: true, conciseDefinition: true } },
+                    word_ecdict: { select: { word: true, phonetic: true, translation: true, collins: true } },
+                },
+            })
+            : await prisma.words.findMany({
+                where: { word: { in: wordNames } },
+                include: {
+                    word_chinese: true,
+                    word_ecdict: true,
+                },
+            });
 
         const wordInfoMap = new Map<string, { phonetic?: string; translation?: string; chineseData: ChineseData | null }>();
         for (const dw of dbWords) {
@@ -1200,9 +1222,9 @@ export async function getUserLibraryWordsEnriched(
                     concise_definition: dw.word_ecdict?.translation
                         ? dw.word_ecdict.translation.replace(/\\n/g, ' ')
                         : dw.word_chinese.conciseDefinition || '',
-                    forms: (dw.word_chinese.forms as Record<string, string>) || {},
-                    definitions: (dw.word_chinese.definitions as unknown as ChineseDefinition[]) || [],
-                    comparison: (dw.word_chinese.comparison as unknown as ChineseComparison[]) || [],
+                    forms: slim ? {} : ((dw.word_chinese as { forms?: unknown }).forms as Record<string, string>) || {},
+                    definitions: slim ? [] : ((dw.word_chinese as { definitions?: unknown }).definitions as unknown as ChineseDefinition[]) || [],
+                    comparison: slim ? [] : ((dw.word_chinese as { comparison?: unknown }).comparison as unknown as ChineseComparison[]) || [],
                     phonetic: dw.word_ecdict?.phonetic || undefined,
                     collins: dw.word_ecdict?.collins || undefined,
                 };

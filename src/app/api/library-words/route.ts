@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
     const groupIndexParam = searchParams.get('groupIndex');
     const groupSizeParam = searchParams.get('groupSize');
     const includeDefinitions = searchParams.get('includeDefinitions') === 'true';
+    const slim = searchParams.get('slim') === 'true' || searchParams.get('slim') === '1';
 
     let words = await getLibraryWords(pathParam);
 
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (includeDefinitions) {
-        const wordsWithData = await getQuizDataForWords(words);
+        const wordsWithData = await getQuizDataForWords(words, slim);
         return NextResponse.json(wordsWithData);
     }
 
