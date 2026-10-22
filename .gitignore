@@ -78,7 +78,19 @@ scripts/deploy-to-vps.ts
 scripts/inspect-server.ts
 scripts/send-all-test-emails.ts
 scripts/send-test-email.ts
+scripts/setup-vps-production.ts
+scripts/fix-vps-auth.ts
+scripts/recreate-auth-with-templates.ts
+scripts/clean-prod-users.ts
+scripts/test-prod-registration.ts
+DEPLOYMENT_INSTRUCTIONS.md
 supabase/config.toml
+
+# 比赛报名表单 / 邮箱自动化脚本（仅本地使用）
+scripts/form-*.cjs
+scripts/qqmail-*.cjs
+scripts/gen-submission-assets.cjs
+scripts/inspect-form.cjs
 
 # ===== 归档的历史调试脚本/文档（含旧服务器 IP 等敏感信息，永不入库）=====
 /scripts/legacy/
@@ -88,32 +100,16 @@ root.body
 supabase/.branches/
 supabase/.temp/
 
-# --- 训练产物与本地工具(2026-09) ---
+# --- 训练产物与本地工具 ---
 outputs/*
 !outputs/eval/
 outputs/eval/*
 !outputs/eval/*.json
 !outputs/eval/*.md
 public/videos/originals/
-model_training/*.log
-model_training/E2E_LOG.md
-docs/交接提示词.md
-scripts/shot_*.js
-scripts/shot_featured*.js
-
-# --- 训练产物与本地工具(2026-09-10) ---
-outputs/*
-!outputs/eval/
-outputs/eval/*
-!outputs/eval/*.json
-!outputs/eval/*.md
-public/videos/originals/
-model_training/*.log
-model_training/E2E_LOG.md
-docs/交接提示词.md
-scripts/shot_*.js
-scripts/legacy/
-supabase/.branches/
-supabase/.temp/
-data/generated/
 public/_originals/
+model_training/*.log
+model_training/E2E_LOG.md
+docs/交接提示词.md
+scripts/shot_*.js
+data/generated/
