@@ -9,6 +9,8 @@ import { ArrowLeft, Volume2, Sparkles, ChevronRight, MessageSquarePlus, StickyNo
 import { useSettings } from '@/context/SettingsContext';
 import { useAI } from '@/components/ai/AIProvider';
 import { telemetry } from '@/lib/telemetry';
+import { wikiLinksToMarkdown, wordFromHref } from '@/lib/wiki-links';
+import WordFormChips from '@/components/word-modules/WordFormChips';
 import { useTranslations, useLocale } from 'next-intl';
 
 // Lazy load heavy markdown rendering and note components
@@ -103,7 +105,7 @@ export default function MobileWordDetailPage() {
                         setChineseData(null);
                         return;
                     }
-                    const processed = (data.content || '').replace(/\[\[(.*?)\]\]/g, (_match: string, linked: string) => `[${linked}](#${linked})`);
+                    const processed = wikiLinksToMarkdown(data.content || '');
                     setContent(processed);
                     setChineseData(data.chinese || null);
                     cacheSet(cacheKey, { content: processed, chinese: data.chinese || null });
@@ -349,10 +351,11 @@ export default function MobileWordDetailPage() {
                                 rehypePlugins={[rehypeRaw]}
                                 components={{
                                     a: ({ href, children, ...props }) => {
-                                        if (href?.startsWith('#')) {
+                                        const linkedWord = wordFromHref(href);
+                                        if (linkedWord) {
                                             return (
                                                 <button
-                                                    onClick={() => handleWordClick(href.substring(1))}
+                                                    onClick={() => handleWordClick(linkedWord)}
                                                     className="cursor-pointer text-blue-400 active:text-blue-300 transition-colors underline"
                                                 >
                                                     {children}
@@ -382,14 +385,7 @@ export default function MobileWordDetailPage() {
                             <span className="w-1 h-5 bg-green-500 rounded-full"></span>
                             {t('wordDetail.wordForms')}
                         </h3>
-                        <div className="flex flex-wrap gap-2">
-                            {Object.entries(chineseData.forms).map(([key, value]) => (
-                                <div key={key} className="flex items-center bg-neutral-900/50 border border-neutral-800 rounded-md px-3 py-2">
-                                    <span className="text-neutral-500 text-xs uppercase font-bold tracking-wider mr-2">{key}</span>
-                                    <span className="text-neutral-200 font-medium text-sm">{value}</span>
-                                </div>
-                            ))}
-                        </div>
+                        <WordFormChips forms={chineseData.forms} compact />
                     </section>
                 )}
 

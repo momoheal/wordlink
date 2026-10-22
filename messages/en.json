@@ -716,5 +716,31 @@
     "recoveringTitle": "Lexiverse is recovering",
     "recoveringDesc": "A rendering error was caught. Click below to reset and recover.",
     "resetRecover": "Reset & recover"
+  },
+  "wordForms": {
+    "plural": "Plural",
+    "singular": "Singular",
+    "present_participle": "-ing form",
+    "past_tense": "Past tense",
+    "past_participle": "Past participle",
+    "third_person_singular": "3rd person singular",
+    "comparative": "Comparative",
+    "superlative": "Superlative",
+    "base_form": "Base form",
+    "gerund": "Gerund",
+    "noun": "Noun",
+    "verb": "Verb",
+    "adjective": "Adjective",
+    "adverb": "Adverb",
+    "noun_form": "Noun",
+    "adjective_form": "Adjective",
+    "adverb_form": "Adverb",
+    "abbreviation": "Abbreviation",
+    "full_form": "Full form",
+    "variant": "Variant",
+    "variants": "Variants",
+    "variant_spelling": "Variant spelling",
+    "variant_spellings": "Variant spellings",
+    "proper_noun": "Proper noun"
   }
 }

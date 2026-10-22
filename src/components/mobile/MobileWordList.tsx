@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { cacheGet, cacheSet } from '@/lib/client-cache';
+import { wikiLinksToMarkdown } from '@/lib/wiki-links';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Search, Folder, ChevronLeft, ChevronDown, ChevronUp, Check, X, MessageCircle, BookOpen } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -178,7 +179,7 @@ export default function MobileWordList() {
           .then(data => {
               if (data) {
                   let processed = data.content || '';
-                  processed = processed.replace(/\[\[(.*?)\]\]/g, (_: string, p1: string) => `[${p1}](#${p1})`);
+                  processed = wikiLinksToMarkdown(processed);
                   cacheSet(`word:${word}`, { content: processed, chineseData: data.chinese || null });
               }
           })
@@ -243,7 +244,7 @@ export default function MobileWordList() {
               .then(data => {
                 if (data) {
                   let processed = data.content || '';
-                  processed = processed.replace(/\[\[(.*?)\]\]/g, (_: string, p1: string) => `[${p1}](#${p1})`);
+                  processed = wikiLinksToMarkdown(processed);
                   cacheSet(`word:${word}`, { content: processed, chineseData: data.chinese || null });
                 }
               })

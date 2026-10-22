@@ -716,5 +716,31 @@
     "recoveringTitle": "Lexiverse 正在恢复",
     "recoveringDesc": "捕获到一个渲染错误，点击下方按钮重置并恢复。",
     "resetRecover": "重置并恢复"
+  },
+  "wordForms": {
+    "plural": "复数",
+    "singular": "单数",
+    "present_participle": "现在分词",
+    "past_tense": "过去式",
+    "past_participle": "过去分词",
+    "third_person_singular": "第三人称单数",
+    "comparative": "比较级",
+    "superlative": "最高级",
+    "base_form": "原形",
+    "gerund": "动名词",
+    "noun": "名词",
+    "verb": "动词",
+    "adjective": "形容词",
+    "adverb": "副词",
+    "noun_form": "名词",
+    "adjective_form": "形容词",
+    "adverb_form": "副词",
+    "abbreviation": "缩写",
+    "full_form": "全称",
+    "variant": "变体",
+    "variants": "变体",
+    "variant_spelling": "异体拼写",
+    "variant_spellings": "异体拼写",
+    "proper_noun": "专有名词"
   }
 }

@@ -9,6 +9,8 @@ import { MODULE_REGISTRY } from '@/types/modules';
 import { useTranslations } from 'next-intl';
 import WordTooltip from '@/components/WordTooltip';
 import ModuleAccordion from './ModuleAccordion';
+import WordFormChips from './WordFormChips';
+import { wordFromHref } from '@/lib/wiki-links';
 
 interface BasicDefModuleProps extends WordModuleProps {
   collapsed: boolean;
@@ -19,10 +21,10 @@ interface BasicDefModuleProps extends WordModuleProps {
 export default function BasicDefModule({ word, chineseData, content, onWordClick, collapsed, onToggle, showTooltip = false, loading = false, error }: BasicDefModuleProps) {
   const t = useTranslations();
   const handleLinkClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
-    const href = event.currentTarget.getAttribute('href');
-    if (href?.startsWith('#')) {
+    const linkedWord = wordFromHref(event.currentTarget.getAttribute('href'));
+    if (linkedWord) {
       event.preventDefault();
-      onWordClick?.(href.slice(1));
+      onWordClick?.(linkedWord);
     }
   };
 
@@ -78,14 +80,7 @@ export default function BasicDefModule({ word, chineseData, content, onWordClick
         {chineseData?.forms && Object.keys(chineseData.forms).length > 0 && (
           <div>
             <h3 className="mb-3 text-lg font-semibold text-white">{t('wordDetail.wordForms')}</h3>
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(chineseData.forms).map(([key, value]) => (
-                <div key={key} className="rounded-md border border-neutral-800 bg-neutral-900/50 px-3 py-2">
-                  <span className="mr-2 text-xs font-bold uppercase tracking-wider text-neutral-500">{key}</span>
-                  <span className="font-medium text-neutral-200">{value}</span>
-                </div>
-              ))}
-            </div>
+            <WordFormChips forms={chineseData.forms} />
           </div>
         )}
 
@@ -144,9 +139,10 @@ function InlineWordLink({ href, children, onClick, showTooltip, ...props }: Inli
 
   const handleEnter = () => {
     setHovered(true);
-    if (!showTooltip || tooltip || !href?.startsWith('#')) return;
+    const linkedWord = wordFromHref(href);
+    if (!showTooltip || tooltip || !linkedWord) return;
     timerRef.current = setTimeout(() => {
-      fetch(`/api/words/${encodeURIComponent(href.slice(1))}`)
+      fetch(`/api/words/${encodeURIComponent(linkedWord)}`)
         .then((response) => response.ok ? response.json() as Promise<{ chinese?: { phonetic?: string; pronunciation?: string; concise_definition?: string } }> : null)
         .then((data) => {
           if (data?.chinese) setTooltip({ phonetic: data.chinese.phonetic || data.chinese.pronunciation, translation: data.chinese.concise_definition });

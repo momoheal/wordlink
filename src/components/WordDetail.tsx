@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import type { ChineseData } from '@/lib/data';
 import { cacheGet, cacheSet } from '@/lib/client-cache';
 import { telemetry } from '@/lib/telemetry';
+import { wikiLinksToMarkdown } from '@/lib/wiki-links';
 import { useSettings } from '@/context/SettingsContext';
 import { useAI } from './ai/AIProvider';
 import AudioSpeechModule from './word-modules/AudioSpeechModule';
@@ -37,7 +38,7 @@ interface NormalizedWordDetail {
 
 function normalizeContent(content: string | null | undefined): string | null {
   if (!content) return null;
-  return content.replace(/\[\[(.*?)\]\]/g, (_match, linkedWord: string) => `[${linkedWord}](#${linkedWord})`);
+  return wikiLinksToMarkdown(content);
 }
 
 function normalizeResponse(value: WordDetailEnvelope): NormalizedWordDetail {

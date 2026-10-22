@@ -3,7 +3,7 @@
 
 const PREFIX = 'wf:';
 export const CACHE_TTL_MS = 2 * 60 * 60 * 1000;
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2; // 2: wiki links with spaces are rendered as <#a b> anchors
 const MAX_MEMORY_ENTRIES = 128;
 
 interface CacheEnvelope<T = unknown> {
