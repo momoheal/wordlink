@@ -67,13 +67,17 @@
       "estMinutes": "预计播放约 {minutes} 分钟",
       "cancel": "取消",
       "apply": "应用并开始沉浸",
-      "libJunior": "初中 ",
-      "libSenior": "高中 ",
-      "libCet4": "四级 ",
-      "libCet6": "六级 ",
-      "libPostgrad": "考研 ",
-      "libToefl": "托福 ",
-      "libSat": "SAT",
+      "levels": {
+        "初中": "初中",
+        "高中": "高中",
+        "CET4": "四级",
+        "CET6": "六级",
+        "考研": "考研",
+        "托福": "托福",
+        "SAT": "SAT"
+      },
+      "modeSequential": "顺序",
+      "modeShuffled": "乱序",
       "title": "播放列表与词库"
     },
     "picker": {

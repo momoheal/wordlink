@@ -67,13 +67,17 @@
       "estMinutes": "About {minutes} min of playback",
       "cancel": "Cancel",
       "apply": "Apply & Immerse",
-      "libJunior": "Middle School ",
-      "libSenior": "High School ",
-      "libCet4": "CET-4 ",
-      "libCet6": "CET-6 ",
-      "libPostgrad": "Grad School ",
-      "libToefl": "TOEFL ",
-      "libSat": "SAT",
+      "levels": {
+        "初中": "Middle School",
+        "高中": "High School",
+        "CET4": "CET-4",
+        "CET6": "CET-6",
+        "考研": "Grad School",
+        "托福": "TOEFL",
+        "SAT": "SAT"
+      },
+      "modeSequential": "In order",
+      "modeShuffled": "Shuffled",
       "title": "Playlist & Vocabulary Hub"
     },
     "picker": {

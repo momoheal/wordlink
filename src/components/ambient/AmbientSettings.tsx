@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { FALLBACK_WORD_POOL } from './wordPool';
 import type { AmbientWordCard } from './wordPool';
+import { MODE_MESSAGE_KEY, parseLevelFileName } from '@/lib/library-groups';
 
 /** Ambient 播放列表配置 */
 export interface AmbientConfig {
@@ -277,18 +278,14 @@ export default function AmbientSettings({
         });
     };
 
-    // 友好展示词库名称
+    // 友好展示词库名称：「3-CET4-乱序.csv」→「四级 · 乱序」；其它名称只去掉目录与扩展名
     const formatLibTitle = (name: string) => {
-        return name
-            .replace(/^考试考纲\//, '')
-            .replace(/\.csv$/, '')
-            .replace(/^1-/, t('libJunior'))
-            .replace(/^2-/, t('libSenior'))
-            .replace(/^3-/, t('libCet4'))
-            .replace(/^4-/, t('libCet6'))
-            .replace(/^5-/, t('libPostgrad'))
-            .replace(/^6-/, t('libToefl'))
-            .replace(/^7-/, t('libSat'));
+        const bare = name.replace(/^考试考纲\//, '');
+        const file = parseLevelFileName(bare);
+        if (!file) return bare.replace(/\.(?:csv|txt)$/i, '');
+
+        const level = t.has(`levels.${file.level}`) ? t(`levels.${file.level}`) : file.level;
+        return `${level} · ${t(MODE_MESSAGE_KEY[file.mode])}`;
     };
 
     return (

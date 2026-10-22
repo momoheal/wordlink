@@ -3,7 +3,7 @@
 import { useMemo, type CSSProperties } from 'react';
 import { BookOpen, ChevronRight, FileText, Folder } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { groupLibraryItems, type LibraryItem, type LibraryLevel, type LibraryMode } from '@/lib/library-groups';
+import { groupLibraryItems, MODE_MESSAGE_KEY, type LibraryItem, type LibraryLevel } from '@/lib/library-groups';
 
 interface LibraryListProps {
     items: LibraryItem[];
@@ -42,11 +42,6 @@ const TINTS = {
     green: 'bg-green-500/10 text-green-300',
     blue: 'bg-blue-500/10 text-blue-300',
     purple: 'bg-purple-500/10 text-purple-300',
-};
-
-const MODE_LABEL: Record<LibraryMode, 'modeSequential' | 'modeShuffled'> = {
-    sequential: 'modeSequential',
-    shuffled: 'modeShuffled',
 };
 
 const CARD = 'rounded-xl border border-neutral-800 bg-neutral-900';
@@ -113,7 +108,7 @@ function LevelCard({ group, size, onSelect }: { group: LibraryLevel; size: Size;
                 <span className={`min-w-14 flex-1 truncate font-medium text-neutral-200 ${s.title}`}>{title}</span>
                 <div className="flex shrink-0 divide-x divide-neutral-800 overflow-hidden rounded-full border border-neutral-800 bg-black">
                     {group.variants.map(({ mode, item }) => {
-                        const label = t(MODE_LABEL[mode]);
+                        const label = t(MODE_MESSAGE_KEY[mode]);
                         return (
                             <button
                                 key={item.path}
