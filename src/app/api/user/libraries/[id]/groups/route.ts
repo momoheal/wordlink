@@ -40,7 +40,9 @@ export async function GET(
 
     // Parse query parameters
     const { searchParams } = new URL(request.url);
-    const groupSize = parseInt(searchParams.get('groupSize') || '100');
+    // groupSize=0 used to make the loop below run forever; anything that is not a positive number falls back to 100
+    const requestedSize = parseInt(searchParams.get('groupSize') || '100', 10);
+    const groupSize = Number.isFinite(requestedSize) && requestedSize > 0 ? requestedSize : 100;
 
     // Get total word count
     const totalWords = library.wordCount;

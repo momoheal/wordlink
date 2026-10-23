@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getLibraryWords, getQuizDataForWords } from '@/lib/data';
-import { prisma } from '@/lib/prisma';
-import { getSession } from '@/lib/auth';
+import { denyLibraryRead } from '@/lib/library-access';
 
 export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
@@ -12,22 +11,8 @@ export async function GET(request: NextRequest) {
     }
 
     // 用户私有词库：仅属主或公开词库可读
-    if (pathParam.startsWith('user:')) {
-        const libraryId = pathParam.slice('user:'.length);
-        const library = await prisma.userLibrary.findUnique({
-            where: { id: libraryId },
-            select: { userId: true, isPublic: true },
-        });
-        if (!library) {
-            return NextResponse.json({ error: 'Library not found' }, { status: 404 });
-        }
-        if (!library.isPublic) {
-            const session = await getSession();
-            if (!session || session.id !== library.userId) {
-                return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-            }
-        }
-    }
+    const denied = await denyLibraryRead(pathParam);
+    if (denied) return denied;
 
     const groupIndexParam = searchParams.get('groupIndex');
     const groupSizeParam = searchParams.get('groupSize');

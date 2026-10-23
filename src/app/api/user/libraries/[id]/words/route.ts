@@ -221,9 +221,11 @@ export async function DELETE(
     }
 
     const body = await request.json();
-    const { wordIds } = body;
+    const wordIds = Array.isArray(body?.wordIds)
+      ? body.wordIds.filter((wordId: unknown): wordId is string => typeof wordId === 'string')
+      : [];
 
-    if (!Array.isArray(wordIds) || wordIds.length === 0) {
+    if (wordIds.length === 0) {
       const response = NextResponse.json(
         { error: 'wordIds array is required' },
         { status: 400 }
@@ -231,23 +233,27 @@ export async function DELETE(
       return addCorsHeaders(response, origin);
     }
 
-    // Delete words and update library word count
-    const deleteResult = await prisma.$transaction([
-      prisma.userLibraryWord.deleteMany({
+    // Delete words and lower the library word count by what was actually deleted: ids from other
+    // libraries, repeats or words already gone must not drag the count down.
+    const deletedCount = await prisma.$transaction(async (tx) => {
+      const { count } = await tx.userLibraryWord.deleteMany({
         where: {
           id: { in: wordIds },
           libraryId: id,
         },
-      }),
-      prisma.userLibrary.update({
-        where: { id },
-        data: { wordCount: { decrement: wordIds.length } },
-      }),
-    ]);
+      });
+      if (count > 0) {
+        await tx.userLibrary.update({
+          where: { id },
+          data: { wordCount: { decrement: count } },
+        });
+      }
+      return count;
+    });
 
     const response = NextResponse.json({
       success: true,
-      deletedCount: deleteResult[0].count,
+      deletedCount,
     });
     return addCorsHeaders(response, origin);
   } catch (error) {

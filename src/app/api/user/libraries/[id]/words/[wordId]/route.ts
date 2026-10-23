@@ -56,11 +56,17 @@ export async function PATCH(
       );
     }
 
-    const updated = await prisma.userLibraryWord.update({
-      where: { id: wordId },
+    // Scope the write to this library: owning library `id` says nothing about a word id taken from
+    // someone else's library.
+    const { count } = await prisma.userLibraryWord.updateMany({
+      where: { id: wordId, libraryId: id },
       data: { word: normalizedWord },
     });
+    if (count === 0) {
+      return NextResponse.json({ error: 'Word not found' }, { status: 404 });
+    }
 
+    const updated = await prisma.userLibraryWord.findUnique({ where: { id: wordId } });
     return NextResponse.json({ word: updated });
   } catch (error) {
     console.error('Error updating word:', error);
@@ -92,15 +98,22 @@ export async function DELETE(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    await prisma.$transaction([
-      prisma.userLibraryWord.delete({
-        where: { id: wordId },
-      }),
-      prisma.userLibrary.update({
-        where: { id: id },
-        data: { wordCount: { decrement: 1 } },
-      }),
-    ]);
+    // Only a word of this library may go, and the count drops only when one did.
+    const deleted = await prisma.$transaction(async (tx) => {
+      const { count } = await tx.userLibraryWord.deleteMany({
+        where: { id: wordId, libraryId: id },
+      });
+      if (count > 0) {
+        await tx.userLibrary.update({
+          where: { id: id },
+          data: { wordCount: { decrement: count } },
+        });
+      }
+      return count;
+    });
+    if (deleted === 0) {
+      return NextResponse.json({ error: 'Word not found' }, { status: 404 });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
