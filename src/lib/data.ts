@@ -99,6 +99,12 @@ function once<T>(load: () => Promise<T>): () => Promise<T> {
     };
 }
 
+/** `<name><ext>` directly inside `dir`, or null when the name would reach outside it ("../", "a/b"). */
+function fileInDir(dir: string, name: string, ext: string): string | null {
+    const filePath = path.resolve(dir, `${name}${ext}`);
+    return path.dirname(filePath) === path.resolve(dir) ? filePath : null;
+}
+
 function pushIndex(map: Map<string, number[]>, key: string, index: number): void {
     const arr = map.get(key);
     if (arr) arr.push(index);
@@ -509,8 +515,9 @@ export async function getWordDetails(word: string): Promise<string | null> {
     }
 
     try {
-        const filePath = path.join(WORD_DATABASE_PATH, `${word}.md`);
-        if (!fs.existsSync(filePath)) return null;
+        // word comes straight from the URL: never let it name a file outside the word database
+        const filePath = fileInDir(WORD_DATABASE_PATH, word, '.md');
+        if (!filePath || !fs.existsSync(filePath)) return null;
         const content = await fs.promises.readFile(filePath, 'utf8');
         await cache.set(cacheKey, content);
         return content;
@@ -548,8 +555,8 @@ export async function getWordChineseData(word: string): Promise<ChineseData | nu
     }
 
     try {
-        const filePath = path.join(CHINESE_DATA_PATH, `${word}.json`);
-        if (!fs.existsSync(filePath)) return null;
+        const filePath = fileInDir(CHINESE_DATA_PATH, word, '.json');
+        if (!filePath || !fs.existsSync(filePath)) return null;
         const content = await fs.promises.readFile(filePath, 'utf8');
         const data = JSON.parse(content);
         await cache.set(cacheKey, data);
@@ -780,7 +787,7 @@ function assembleFissionGraph(
 
 export async function getFissionData(targetWord: string): Promise<GraphData> {
     if (!targetWord) {
-        return { nodes: [], links: {}, definitions: {} } as any;
+        return { nodes: [], links: [], definitions: {} };
     }
 
     const normalizedTarget = targetWord.toLowerCase().trim();
@@ -988,14 +995,16 @@ export async function getFissionData(targetWord: string): Promise<GraphData> {
         }
     }
 
+    // 只为图里出现的词取元数据与占位判定：ECDICT 有 77 万条，整表复制进新 Map/Set 每次请求要上百毫秒
+    const graphIds = new Set<string>([normalizedTarget, ...rows.map(r => r.to)]);
     const meta = new Map<string, NodeMeta>();
-    ecdictMap.forEach((v, k) => meta.set(k, {
-        phonetic: v.phonetic,
-        translation: v.translation?.replace(/\\n/g, ' '),
-    }));
+    for (const id of graphIds) {
+        const v = ecdictMap.get(id);
+        if (v) meta.set(id, { phonetic: v.phonetic, translation: v.translation?.replace(/\\n/g, ' ') });
+    }
 
     // 占位判定与 DB 路径对齐：word_chinese 词干 ∪ ECDICT 词目（≈ words 表覆盖）
-    const knownAll = new Set<string>([...known, ...ecdictMap.keys()]);
+    const knownAll = new Set<string>([...graphIds].filter(id => known.has(id) || ecdictMap.has(id)));
 
     const result = assembleFissionGraph(normalizedTarget, rows, knownAll, meta);
     await cache.set(cacheKey, result);

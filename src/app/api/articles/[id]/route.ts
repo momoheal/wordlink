@@ -16,14 +16,15 @@ export async function GET(
 ) {
     const { id } = await context.params;
 
-    // 1. EchoStream 远程文章代理
-    if (id.startsWith('echo-')) {
-        const rawId = id.replace(/^echo-/, '');
+    // 1. EchoStream 远程文章代理（id 原样拼进内网 URL 前先校验：防止 ../ 改写请求路径；带超时，服务挂起时不拖住页面）
+    const echoId = /^echo-([\w-]+)$/.exec(id)?.[1];
+    if (echoId) {
         const fastApiUrl = process.env.FASTAPI_INTERNAL_URL || 'http://localhost:8000';
+        const contentUrl = `${fastApiUrl}/api/v1/contents/${encodeURIComponent(echoId)}`;
         try {
             const [contentRes, paraRes] = await Promise.all([
-                fetch(`${fastApiUrl}/api/v1/contents/${rawId}`),
-                fetch(`${fastApiUrl}/api/v1/contents/${rawId}/paragraphs`),
+                fetch(contentUrl, { signal: AbortSignal.timeout(5000) }),
+                fetch(`${contentUrl}/paragraphs`, { signal: AbortSignal.timeout(5000) }),
             ]);
 
             if (contentRes.ok && paraRes.ok) {
@@ -79,10 +80,13 @@ export async function GET(
         console.error('Error fetching local article:', err);
     }
 
-    // 3. 内存种子兜底
-    const seed = CURATED_ARTICLES.find((a) => a.title.toLowerCase().includes(id.toLowerCase())) || CURATED_ARTICLES[0];
+    // 3. 内存种子兜底：数据库不可用时列表接口给的是 seed-N / fallback-N，按下标取回同一篇，
+    //    而不是一律返回第一篇
+    const seedIndex = Number(/^(?:seed|fallback)-(\d+)$/.exec(id)?.[1] ?? NaN);
+    const indexed = Number.isInteger(seedIndex) ? CURATED_ARTICLES[seedIndex] : undefined;
+    const seed = indexed || CURATED_ARTICLES.find((a) => a.title.toLowerCase().includes(id.toLowerCase())) || CURATED_ARTICLES[0];
     return NextResponse.json({
-        id: `seed-0`,
+        id: `seed-${CURATED_ARTICLES.indexOf(seed)}`,
         title: seed.title,
         titleZh: seed.titleZh,
         level: seed.level,
