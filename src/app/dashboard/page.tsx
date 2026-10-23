@@ -56,7 +56,7 @@ export default function DashboardPage() {
     const locale = useLocale();
     const { theme } = useTheme();
     const dateLocale = locale === 'zh' ? 'zh-CN' : 'en-US';
-    // 周一为第一列（与下方 offset 计算一致），narrow 单字符适配小格子
+    // 周一为第一列（与下方 offset 计算一致），narrow 单字符适配小格子；英文 narrow 会重复（T、S），所以列表 key 用下标
     const weekdayLabels = Array.from({ length: 7 }, (_, i) =>
         new Date(2024, 0, i + 1).toLocaleDateString(dateLocale, { weekday: 'narrow' })
     );
@@ -77,31 +77,15 @@ export default function DashboardPage() {
     const [sortBy, setSortBy] = useState<'default' | 'date' | 'mastery_asc' | 'mastery_desc'>('mastery_asc');
 
 
-    // Fetch libraries on mount：递归展开目录，平铺所有词库文件
-    // （/api/libraries 不带 path 时只返回顶层，顶层往往是 directory，
-//   而 dashboard 只显示 file 类型，不递归会导致下拉框为空）
+    // Fetch libraries on mount：flat=true 由服务端展开目录，平铺所有词库文件，用户词库只出现一次
+    // （按 path 逐层请求的话，每一层的响应都会附上用户词库，下拉框里就重复了）
     useEffect(() => {
-        const fetchLibraries = async (path: string = ''): Promise<{ name: string, path: string, type: string }[]> => {
-            const res = await fetch(`/api/libraries?path=${encodeURIComponent(path)}`);
-            if (!res.ok) throw new Error('Failed to fetch libraries');
-            const items = await res.json();
-            // 同级目录并发递归；Promise.all 保序，展平后顺序与串行版一致
-            // （首个 file 即默认选中词库，顺序不能变）
-            const grouped = await Promise.all(items.map(async (item: { name: string, path: string, type: string }) => {
-                if (item.type === 'file') {
-                    return [item];
-                }
-                if (item.type === 'directory' && item.path.split('/').length <= 3) {
-                    // 递归进入子目录（限深 3 层防止异常循环）
-                    return fetchLibraries(item.path);
-                }
-                return [];
-            }));
-            return grouped.flat();
-        };
-
-        fetchLibraries()
-            .then(files => {
+        fetch('/api/libraries?flat=true')
+            .then(res => {
+                if (!res.ok) throw new Error('Failed to fetch libraries');
+                return res.json();
+            })
+            .then((files: { name: string, path: string, type: string }[]) => {
                 setLibraries(files);
                 // 默认选中第一个词库，保证开箱可用
                 if (files.length > 0) {
@@ -324,8 +308,8 @@ export default function DashboardPage() {
                                     {isMobile ? (
                                         // Mobile: fill full width
                                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
-                                            {weekdayLabels.map(d => (
-                                                <div key={d} className="flex items-center justify-center text-[10px] text-neutral-600" style={{ height: 20 }}>{d}</div>
+                                            {weekdayLabels.map((d, i) => (
+                                                <div key={i} className="flex items-center justify-center text-[10px] text-neutral-600" style={{ height: 20 }}>{d}</div>
                                             ))}
                                             {Array.from({ length: offset }, (_, i) => (
                                                 <div key={`e-${i}`} style={{ height: 36 }} />
@@ -351,8 +335,8 @@ export default function DashboardPage() {
                                     ) : (
                                         // Desktop: fixed 26px cells
                                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 26px)', gap: '3px' }}>
-                                            {weekdayLabels.map(d => (
-                                                <div key={d} style={{ width: 26, height: 18 }} className="flex items-center justify-center text-[9px] text-neutral-600">{d}</div>
+                                            {weekdayLabels.map((d, i) => (
+                                                <div key={i} style={{ width: 26, height: 18 }} className="flex items-center justify-center text-[9px] text-neutral-600">{d}</div>
                                             ))}
                                             {Array.from({ length: offset }, (_, i) => (
                                                 <div key={`e-${i}`} style={{ width: 26, height: 26 }} />
