@@ -28,16 +28,16 @@ const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), {
     loading: () => <GraphLoadingFallback />,
 }) as unknown as React.ComponentType<AtlasGraphProps>;
 
-/** Screen space (px) that other windows cover; the graph is framed in what is left. */
-type Insets = Record<'top' | 'right' | 'bottom' | 'left', number>;
-const NO_INSETS: Insets = { top: 0, right: 0, bottom: 0, left: 0 };
+/** A window floating over the graph, in client px (a DOMRect will do). */
+interface Obstacle { x: number; y: number; width: number; height: number }
 
 interface PanelFissionGraphProps {
     word: string | null;
     onNodeClick?: (word: string) => void;
     /** "immersive" fills the screen behind floating windows: always dark, with floating controls. */
     variant?: 'panel' | 'immersive';
-    inset?: Partial<Insets>;
+    /** Windows over the graph: it is framed in the largest space they leave free (see frameDodging). */
+    obstacles?: readonly Obstacle[];
     /** A back control (named after `backTo` when known), so a word without neighbours is never a dead end. */
     onBack?: () => void;
     backTo?: string | null;
@@ -382,8 +382,8 @@ function solveLayout(view: View): Map<string, Point> {
     return new Map(bodies.map((b) => [b.id, { x: b.x, y: b.y }]));
 }
 
-/** The camera that frames these positions in the uncovered part of the area, leaving room for labels and pills. */
-function cameraFor(nodes: AtlasNode[], positions: Map<string, Point>, width: number, height: number, inset: Insets = NO_INSETS): Camera {
+/** The camera that frames these positions inside `box` (graph-area px; the whole area by default), leaving room for labels and pills. */
+function cameraFor(nodes: AtlasNode[], positions: Map<string, Point>, width: number, height: number, box: Box = { x: 0, y: 0, w: width, h: height }): Camera {
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const n of nodes) {
         const p = positions.get(n.id);
@@ -396,15 +396,71 @@ function cameraFor(nodes: AtlasNode[], positions: Map<string, Point>, width: num
     }
     if (minX === Infinity) return { x: 0, y: 0, k: 1 };
     const k = Math.min(1.8, Math.max(0.35, Math.min(
-        (width - inset.left - inset.right - FRAME_PADDING * 2) / Math.max(1, maxX - minX),
-        (height - inset.top - inset.bottom - FRAME_PADDING * 2) / Math.max(1, maxY - minY),
+        (box.w - FRAME_PADDING * 2) / Math.max(1, maxX - minX),
+        (box.h - FRAME_PADDING * 2) / Math.max(1, maxY - minY),
     )));
-    // The camera looks at the middle of the whole area; shift it so the graph sits in the uncovered part.
+    // The camera looks at the middle of the whole area; shift it so the graph sits in the middle of the box.
     return {
-        x: (minX + maxX) / 2 + (inset.right - inset.left) / (2 * k),
-        y: (minY + maxY) / 2 + (inset.bottom - inset.top) / (2 * k),
+        x: (minX + maxX) / 2 - (box.x + box.w / 2 - width / 2) / k,
+        y: (minY + maxY) / 2 - (box.y + box.h / 2 - height / 2) / k,
         k,
     };
+}
+
+/** Dodging floating windows is worth it while the graph keeps at least this share of its size. */
+const DODGE_KEEPS = 0.7;
+
+const overlaps = (a: Box, b: Box) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+/** The largest rectangles of `area` that no cover touches, found by trying every combination of the covers' edges. */
+function freeBoxes(area: Box, covers: Box[]): Box[] {
+    const right = area.x + area.w, bottom = area.y + area.h;
+    const within = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+    const lefts = [area.x, ...covers.map((c) => within(c.x + c.w, area.x, right))];
+    const rights = [right, ...covers.map((c) => within(c.x, area.x, right))];
+    const tops = [area.y, ...covers.map((c) => within(c.y + c.h, area.y, bottom))];
+    const bottoms = [bottom, ...covers.map((c) => within(c.y, area.y, bottom))];
+    const boxes: Box[] = [];
+    for (const l of lefts) for (const r of rights) {
+        if (r - l < FRAME_PADDING * 2) continue;
+        for (const t of tops) for (const b of bottoms) {
+            if (b - t < FRAME_PADDING * 2) continue;
+            const box = { x: l, y: t, w: r - l, h: b - t };
+            if (!covers.some((c) => overlaps(box, c))) boxes.push(box);
+        }
+    }
+    return boxes;
+}
+
+/**
+ * The camera when windows float over the graph: framed in the free part of the area that shows it largest,
+ * or, when every free part would show it much smaller, on the whole area, under the windows.
+ */
+function frameDodging(
+    nodes: AtlasNode[], positions: Map<string, Point>, width: number, height: number, area: Box, covers: Box[],
+): { camera: Camera; dodged: boolean } {
+    const whole = cameraFor(nodes, positions, width, height, area);
+    let best: Camera | null = null;
+    for (const box of freeBoxes(area, covers)) {
+        const camera = cameraFor(nodes, positions, width, height, box);
+        if (!best || camera.k > best.k) best = camera;
+    }
+    return best && best.k >= whole.k * DODGE_KEEPS ? { camera: best, dodged: covers.length > 0 } : { camera: whole, dodged: false };
+}
+
+/** Moves a box out of the covers it overlaps, each time the shortest way, leaving a small gap. */
+function clearOf(box: Box, covers: Box[]): Box {
+    let b = box;
+    for (const c of covers) {
+        if (!overlaps(b, c)) continue;
+        const moves = [
+            { x: c.x - (b.x + b.w) - 6, y: 0 }, { x: c.x + c.w + 6 - b.x, y: 0 },
+            { x: 0, y: c.y - (b.y + b.h) - 6 }, { x: 0, y: c.y + c.h + 6 - b.y },
+        ];
+        const m = moves.reduce((a, n) => (Math.hypot(n.x, n.y) < Math.hypot(a.x, a.y) ? n : a));
+        b = { ...b, x: b.x + m.x, y: b.y + m.y };
+    }
+    return b;
 }
 
 /** Where the words come to rest: their targets mid-transition, otherwise where they are now. */
@@ -1117,7 +1173,7 @@ function shortGloss(translation?: string): string {
     return parts.length > 14 ? `${parts.slice(0, 13)}…` : parts;
 }
 
-export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel', inset, onBack, backTo, actions }: PanelFissionGraphProps) {
+export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel', obstacles, onBack, backTo, actions }: PanelFissionGraphProps) {
     const t = useTranslations('graph');
     const { showHoverTooltip, showGraphTooltip, graphPointerSnap: snapping, updateSettings } = useSettings();
     const { theme } = useTheme();
@@ -1148,7 +1204,12 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
     const viewRef = useRef<View | null>(null);
     const sizeRef = useRef(size);
     const toolbarRef = useRef<HTMLDivElement>(null);
-    const insetRef = useRef<Insets>(NO_INSETS);
+    /** The windows over the graph, in client px. */
+    const obstaclesRef = useRef<Box[]>([]);
+    /** The camera frames the graph by itself until the person pans or zooms; then it is theirs until "fit" or the next word. */
+    const autoFrame = useRef(true);
+    /** Whether that framing moved the graph clear of the windows (its group labels then keep clear too). */
+    const dodged = useRef(false);
     const motionRef = useRef<NodeMotion | null>(null);
     const cameraRef = useRef<CameraMotion | null>(null);
     /** True while this component moves the camera, to tell its own zoom events from the user's. */
@@ -1253,23 +1314,32 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
         resizeObserver.current.observe(el);
     }, []);
     useEffect(() => { sizeRef.current = size; }, [size]);
-    const insetKey = [inset?.top, inset?.right, inset?.bottom, inset?.left].map((v) => v ?? 0).join(',');
+    const obstacleKey = (obstacles ?? []).map((o) => [o.x, o.y, o.width, o.height].map(Math.round).join(',')).join(';');
     useEffect(() => {
-        const [top, right, bottom, left] = insetKey.split(',').map(Number);
-        insetRef.current = { top, right, bottom, left };
-    }, [insetKey]);
+        obstaclesRef.current = obstacleKey
+            ? obstacleKey.split(';').map((o) => { const [x, y, w, h] = o.split(',').map(Number); return { x, y, w, h }; })
+            : [];
+    }, [obstacleKey]);
 
-    /** What covers the graph area: other windows, and in the immersive variant the floating toolbar. */
-    const coverage = useCallback((): Insets => {
-        const covered = insetRef.current, bar = toolbarRef.current;
-        return immersive && bar ? { ...covered, top: Math.max(covered.top, bar.offsetTop + bar.offsetHeight) } : covered;
+    /** Where the graph may sit (below the immersive variant's floating toolbar), in graph-area px. */
+    const graphSpace = useCallback((): Box => {
+        const s = sizeRef.current, bar = toolbarRef.current;
+        const top = immersive && bar ? bar.offsetTop + bar.offsetHeight : 0;
+        return { x: 0, y: top, w: s.width, h: s.height - top };
     }, [immersive]);
 
-    /** The camera that frames these positions where the graph area is not covered. */
-    const frame = useCallback(
-        (nodes: AtlasNode[], positions: Map<string, Point>) => cameraFor(nodes, positions, sizeRef.current.width, sizeRef.current.height, coverage()),
-        [coverage],
-    );
+    /** The windows over the graph, in graph-area px. */
+    const covers = useCallback((): Box[] => {
+        const at = containerRef.current?.getBoundingClientRect();
+        return obstaclesRef.current.map((o) => ({ ...o, x: o.x - (at?.left ?? 0), y: o.y - (at?.top ?? 0) }));
+    }, []);
+
+    /** The camera that frames these positions, dodging the windows over the graph when that pays. */
+    const frame = useCallback((nodes: AtlasNode[], positions: Map<string, Point>) => {
+        const framing = frameDodging(nodes, positions, sizeRef.current.width, sizeRef.current.height, graphSpace(), covers());
+        dodged.current = framing.dodged;
+        return framing.camera;
+    }, [graphSpace, covers]);
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
@@ -1410,6 +1480,7 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
         const fg = fgRef.current;
         if (!fg) return;
         const now = performance.now();
+        autoFrame.current = true;
         const to = frame(target.nodes, targets);
         const moves = planMoves(target.nodes, targets, statesOf(outgoing, motionRef.current, now));
         const newGraph = !outgoing || outgoing.nodes[0] !== target.nodes[0];
@@ -1482,24 +1553,26 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
     }, [settleView, applyCamera]);
 
     const fit = useCallback(() => {
+        autoFrame.current = true;
         if (view) moveCamera(frame(view.nodes, restingPositions(view.nodes, motionRef.current)));
     }, [view, frame, moveCamera]);
 
-    // Panels are resizable and windows come and go over the immersive graph: keep the graph framed in
-    // whatever space is left.
+    // Panels are resizable, and windows move, resize and close over the immersive graph: keep the graph
+    // framed in whatever space is left, unless the person has taken the camera.
     useEffect(() => {
         const current = viewRef.current;
         if (!current || !size.width) return;
         const timer = window.setTimeout(() => {
-            moveCamera(frame(current.nodes, restingPositions(current.nodes, motionRef.current)));
+            if (autoFrame.current) moveCamera(frame(current.nodes, restingPositions(current.nodes, motionRef.current)));
         }, 150);
         return () => window.clearTimeout(timer);
-    }, [size, insetKey, frame, moveCamera]);
+    }, [size, obstacleKey, frame, moveCamera]);
 
     // Brings dragged words back into the layout.
     const relayout = useCallback(() => { if (view && layout) beginTransition(view, layout, view, true, []); }, [view, layout, beginTransition]);
 
     const zoomBy = (factor: number) => {
+        autoFrame.current = false;
         const from = readCamera();
         if (from) moveCamera({ ...from, k: Math.min(4, Math.max(0.25, from.k * factor)) });
     };
@@ -1516,7 +1589,8 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
         const area = containerRef.current;
         if (!fg || !view || !area) return;
         const now = performance.now();
-        const covered = coverage();
+        const space = graphSpace();
+        const windows = autoFrame.current && dodged.current ? covers() : [];
         // A new graph's labels fade in with it, even when their words were already on screen.
         const graphFade = reducedMotion() ? 1 : clamp01(spring(now - shownAt.current.pills) * ENTER_SPEED);
         const { x: ox, y: oy } = view.origin;
@@ -1543,8 +1617,10 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
             let left = p.x - w / 2 + ux * w / 2;
             // Words carry their label underneath, so leave room for it below the cluster.
             let top = p.y - h / 2 + uy * h / 2 + (uy > 0 ? 16 : 0);
-            left = Math.min(Math.max(left, covered.left + 6), size.width - covered.right - w - 6);
-            top = Math.min(Math.max(top, covered.top + 6), size.height - covered.bottom - h - 52);
+            left = Math.min(Math.max(left, 6), size.width - w - 6);
+            top = Math.min(Math.max(top, space.y + 6), size.height - h - 52);
+            // While the graph dodges floating windows, its labels stay out from under them too.
+            if (windows.length) ({ x: left, y: top } = clearOf({ x: left, y: top, w, h }, windows));
             el.style.visibility = 'visible';
             el.style.opacity = String(Math.min(graphFade, Math.max(...members.map((n) => fadeIn(n.born, now)))));
             el.style.transform = `translate(${left}px, ${top}px)`;
@@ -1566,7 +1642,7 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
             tip.style.visibility = at ? 'visible' : 'hidden';
             if (at) tip.style.transform = `translate(${at.x}px, ${at.y - 18}px) translate(-50%, -100%)`;
         }
-    }, [view, activeHover, coverage, size]);
+    }, [view, activeHover, graphSpace, covers, size]);
 
     // ---- canvas painters -------------------------------------------------------
     const ringAlpha = useCallback((id: string, now: number) => {
@@ -1836,12 +1912,17 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
                     const box = e.currentTarget.getBoundingClientRect();
                     const p = { x: e.clientX - box.left, y: e.clientY - box.top };
                     const from = pressedAt.current;
-                    if (from && Math.hypot(p.x - from.x, p.y - from.y) >= 5) dragging.current = true;
+                    if (from && Math.hypot(p.x - from.x, p.y - from.y) >= 5) {
+                        // A drag pans the graph (or moves a word): the camera is the person's now.
+                        dragging.current = true;
+                        autoFrame.current = false;
+                    }
                     // Over the pills and controls the system pointer takes over; touch has no pointer to draw.
                     const onCanvas = e.target instanceof HTMLCanvasElement && e.pointerType !== 'touch';
                     trackPointer(onCanvas ? p : null, !dragging.current);
                 }}
                 onPointerLeave={() => trackPointer(null)}
+                onWheel={() => { autoFrame.current = false; }}
                 onPointerDown={(e) => {
                     const box = e.currentTarget.getBoundingClientRect();
                     pressedAt.current = e.button === 0 && e.target instanceof HTMLCanvasElement ? { x: e.clientX - box.left, y: e.clientY - box.top } : null;
@@ -1984,6 +2065,7 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
                             onChange={(e) => {
                                 const from = readCamera();
                                 cameraRef.current = null;
+                                autoFrame.current = false;
                                 if (from) applyCamera({ ...from, k: Number(e.target.value) / 100 });
                             }}
                             aria-label={t('atlas.zoom')}

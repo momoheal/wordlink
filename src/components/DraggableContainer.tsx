@@ -14,6 +14,8 @@ interface DraggableContainerProps {
     minWidth?: number;
     minHeight?: number;
     headerActions?: React.ReactNode;
+    /** The screen rectangle the window covers, reported whenever it comes to rest (shown, moved, resized, minimized). */
+    onRectChange?: (rect: DOMRect) => void;
 }
 
 export default function DraggableContainer({
@@ -25,7 +27,8 @@ export default function DraggableContainer({
     className = '',
     minWidth = 300,
     minHeight = 200,
-    headerActions
+    headerActions,
+    onRectChange,
 }: DraggableContainerProps) {
     const t = useTranslations('misc.container');
     const [position, setPosition] = useState(initialPosition);
@@ -42,6 +45,15 @@ export default function DraggableContainer({
     const resizeStart = useRef({ x: 0, y: 0, width: 0, height: 0, posX: 0, posY: 0 });
 
     const containerRef = useRef<HTMLDivElement>(null);
+
+    // Report where the window sits once it comes to rest, not on every step of a drag. The callback is read
+    // through a ref, so a parent passing a new function on each render does not report again.
+    const onRectChangeRef = useRef(onRectChange);
+    useEffect(() => { onRectChangeRef.current = onRectChange; });
+    useEffect(() => {
+        if (isDragging || isResizing || !containerRef.current) return;
+        onRectChangeRef.current?.(containerRef.current.getBoundingClientRect());
+    }, [position, size, isMinimized, isDragging, isResizing]);
 
     // --- Dragging Logic ---
     const handleMouseDown = (e: React.MouseEvent) => {
@@ -135,6 +147,7 @@ export default function DraggableContainer({
     if (isMinimized) {
         return (
             <div
+                ref={containerRef}
                 className="fixed z-50 bg-black/40 backdrop-blur-xl border border-white/20 rounded-2xl p-3 cursor-pointer hover:bg-white/10 transition-all shadow-2xl flex items-center gap-3 group"
                 style={{ left: position.x, top: position.y }}
                 onMouseDown={handleMouseDown}

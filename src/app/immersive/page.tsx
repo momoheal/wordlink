@@ -23,6 +23,17 @@ export default function ImmersivePage() {
 
     const [showList, setShowList] = useState(true);
     const [showDetail, setShowDetail] = useState(true);
+    // Where the floating windows actually are, so the graph can be framed around them.
+    type WindowRect = { x: number; y: number; width: number; height: number };
+    const [windowRects, setWindowRects] = useState<{ list?: WindowRect; detail?: WindowRect }>({});
+    const placeWindow = (key: 'list' | 'detail') => (r: DOMRect) => setWindowRects((prev) => {
+        const next = { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) };
+        const old = prev[key];
+        return old && old.x === next.x && old.y === next.y && old.width === next.width && old.height === next.height
+            ? prev
+            : { ...prev, [key]: next };
+    });
+    const graphObstacles = [showList && windowRects.list, showDetail && windowRects.detail].filter((r): r is WindowRect => !!r);
     const { updateSettings } = useSettings();
 
     // 悬浮窗位置依赖视口宽度,等客户端挂载后再渲染,避免 SSR 水合不一致
@@ -159,13 +170,13 @@ export default function ImmersivePage() {
 
     return (
         <div data-theme="dark" className="relative w-screen h-screen overflow-hidden bg-black">
-            {/* Background Graph: the same graph as the workspace, framed in the space the docked windows leave */}
+            {/* Background Graph: the same graph as the workspace, framed in the space the windows leave free */}
             <div className="absolute inset-0 z-0">
                 <PanelFissionGraph
                     word={currentWord}
                     onNodeClick={handleWordSelect}
                     variant="immersive"
-                    inset={rightDock && (showList || showDetail) ? { right: vw - detailPos.x + 16 } : undefined}
+                    obstacles={graphObstacles}
                     onBack={currentIndex > 0 ? goBack : undefined}
                     backTo={currentIndex > 0 ? history[currentIndex - 1] : null}
                 />
@@ -178,6 +189,7 @@ export default function ImmersivePage() {
                     initialPosition={listPos}
                     initialSize={listSize}
                     onClose={() => setShowList(false)}
+                    onRectChange={placeWindow('list')}
                 >
                     <WordList
                         onWordSelect={handleWordSelect}
@@ -197,6 +209,7 @@ export default function ImmersivePage() {
                     initialPosition={detailPos}
                     initialSize={detailSize}
                     onClose={() => setShowDetail(false)}
+                    onRectChange={placeWindow('detail')}
                     headerActions={
                         <div className="flex items-center gap-1 mr-2">
                             <button
