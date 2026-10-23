@@ -167,17 +167,16 @@ export default function DraggableContainer({
     return (
         <div
             ref={containerRef}
-            className={`fixed z-40 flex flex-col rounded-2xl shadow-2xl overflow-hidden transition-shadow duration-300 ${className}`}
+            className={`fixed z-40 flex flex-col rounded-2xl border border-white/8 overflow-hidden transition-shadow duration-300 ${className}`}
             style={{
                 left: position.x,
                 top: position.y,
                 width: size.width,
                 height: size.height,
-                // Apple-like Glassmorphism
-                backgroundColor: 'rgba(20, 20, 20, 0.25)', // Increased transparency
-                backdropFilter: 'blur(20px) saturate(180%)', // Slightly reduced blur for clearer background visibility
-                border: '1px solid rgba(255, 255, 255, 0.08)', // More subtle border
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' // Deep shadow
+                // Apple-like glass in either theme (--window-glass in globals.css); the border above flips with the palette
+                backgroundColor: 'var(--window-glass)',
+                backdropFilter: 'blur(20px) saturate(180%)',
+                boxShadow: '0 25px 50px -12px var(--window-shadow)',
             }}
         >
             {/* Header Bar */}

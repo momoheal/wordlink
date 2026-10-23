@@ -34,7 +34,7 @@ interface Obstacle { x: number; y: number; width: number; height: number }
 interface PanelFissionGraphProps {
     word: string | null;
     onNodeClick?: (word: string) => void;
-    /** "immersive" fills the screen behind floating windows: always dark, with floating controls. */
+    /** "immersive" fills the screen behind floating windows, with floating controls. */
     variant?: 'panel' | 'immersive';
     /** Windows over the graph: it is framed in the largest space they leave free (see frameDodging). */
     obstacles?: readonly Obstacle[];
@@ -1178,7 +1178,7 @@ export default function PanelFissionGraph({ word, onNodeClick, variant = 'panel'
     const { showHoverTooltip, showGraphTooltip, graphPointerSnap: snapping, updateSettings } = useSettings();
     const { theme } = useTheme();
     const immersive = variant === 'immersive';
-    const palette = PALETTE[immersive ? 'dark' : theme];
+    const palette = PALETTE[theme];
 
     // The last graph that arrived stays on screen while the next word loads; `from` is the outgoing
     // graph it morphs out of.

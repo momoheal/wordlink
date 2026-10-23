@@ -47,6 +47,11 @@ body {
 [data-theme="light"] ::-webkit-scrollbar-thumb { background: #cfcabd; }
 [data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: #b6b1a3; }
 
+/* Floating windows (immersive mode): a thin dark glass on black, a denser paper glass on paper, so text on
+   them stays readable over the graph. Variables, so a subtree that forces data-theme gets its own. */
+:root, [data-theme="dark"] { --window-glass: rgba(20, 20, 20, 0.25); --window-shadow: rgba(0, 0, 0, 0.5); }
+[data-theme="light"] { --window-glass: rgba(253, 252, 248, 0.72); --window-shadow: rgba(60, 45, 20, 0.2); }
+
 /* neutral-900 is a raised surface on paper; as a hairline on black it must stay visible */
 [data-theme="light"] .border-neutral-900 { border-color: #e2ded3; }
 

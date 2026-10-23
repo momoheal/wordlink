@@ -169,7 +169,7 @@ export default function ImmersivePage() {
     const currentWord = currentIndex >= 0 ? history[currentIndex] : null;
 
     return (
-        <div data-theme="dark" className="relative w-screen h-screen overflow-hidden bg-black">
+        <div className="relative w-screen h-screen overflow-hidden bg-black">
             {/* Background Graph: the same graph as the workspace, framed in the space the windows leave free */}
             <div className="absolute inset-0 z-0">
                 <PanelFissionGraph
