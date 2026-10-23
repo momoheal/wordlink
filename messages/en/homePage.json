@@ -111,8 +111,6 @@
     "showNav": "Show navigation bar",
     "hideNav": "Hide navigation bar",
     "filters": "Filters",
-    "wordListLabel": "Word List",
-    "wordCount": "{count} words",
     "cancelSelection": "Cancel selection",
     "askAiSelected": "Ask AI about selected words",
     "startQuizSelected": "Start quiz with selected words"

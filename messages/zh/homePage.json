@@ -111,8 +111,6 @@
     "showNav": "显示导航栏",
     "hideNav": "隐藏导航栏",
     "filters": "筛选",
-    "wordListLabel": "词表",
-    "wordCount": "{count} 个单词",
     "cancelSelection": "取消选择",
     "askAiSelected": "向 AI 询问选中单词",
     "startQuizSelected": "用选中单词开始测验"
