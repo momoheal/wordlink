@@ -11,6 +11,7 @@ interface LibraryItem {
   name: string;
   type: 'file' | 'directory';
   path: string;
+  source?: 'user';
 }
 
 interface GroupItem {
@@ -50,9 +51,10 @@ export default function QuizMenuPage() {
           fetch('/api/libraries?path=考试考纲').then((r) => (r.ok ? r.json() : [])),
         ]);
 
+        // The API appends the user's own libraries to every listing; keep the root's copy only
         const allFiles: LibraryItem[] = [
           ...rootRes.filter((item: LibraryItem) => item.type === 'file'),
-          ...syllabusRes.filter((item: LibraryItem) => item.type === 'file'),
+          ...syllabusRes.filter((item: LibraryItem) => item.type === 'file' && item.source !== 'user'),
         ];
 
         setLibraries(allFiles);
