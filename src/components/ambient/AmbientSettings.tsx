@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
     BookOpen,
@@ -229,12 +229,23 @@ export default function AmbientSettings({
         fetchWordsForPreview(draft.path, draft.groupIndex, draft.groupSize);
     }, [draft.path, draft.groupIndex, draft.groupSize, fetchWordsForPreview]);
 
-    // 默认全选当前加载出的单词
+    // 换成另一份词表（换词库 / 分组 / 每组词数）时默认全选它；同一份词表重复载入则保持勾选不变。
+    // 打开面板后的第一份词表，保留上次应用时手动勾选的词。
+    // 不能写成「勾选为空就全选」：换词库时旧词表还在，会把旧词全选上，「清空」也会立刻被撤销。
+    const loadedList = useRef<string | null>(null);
+    const keepSavedSelection = useRef(Boolean(draft.customWordList?.length));
     useEffect(() => {
-        if (previewWords.length > 0 && selectedWords.size === 0) {
-            setSelectedWords(new Set(previewWords.map((w) => w.word)));
+        if (previewWords.length === 0) return;
+        const list = previewWords.map((w) => w.word).join('\n');
+        if (list === loadedList.current) return;
+        loadedList.current = list;
+
+        if (keepSavedSelection.current) {
+            keepSavedSelection.current = false;
+            return;
         }
-    }, [previewWords, selectedWords.size]);
+        setSelectedWords(new Set(previewWords.map((w) => w.word)));
+    }, [previewWords]);
 
     // 单词勾选切换
     const toggleWord = (word: string) => {
@@ -371,15 +382,14 @@ export default function AmbientSettings({
                                     {/* 内置精选意境词池 */}
                                     <button
                                         type="button"
-                                        onClick={() => {
+                                        onClick={() =>
                                             setDraft((d) => ({
                                                 ...d,
                                                 path: '',
                                                 pathName: t('builtinPoolName'),
                                                 groupIndex: 0,
-                                            }));
-                                            setSelectedWords(new Set());
-                                        }}
+                                            }))
+                                        }
                                         className={`flex w-full items-center justify-between rounded-xl border p-3 text-left transition-all ${
                                             draft.path === ''
                                                 ? 'border-white/60 bg-white/20 text-white shadow-lg'
@@ -404,15 +414,14 @@ export default function AmbientSettings({
                                                 <button
                                                     key={lib.path}
                                                     type="button"
-                                                    onClick={() => {
+                                                    onClick={() =>
                                                         setDraft((d) => ({
                                                             ...d,
                                                             path: lib.path,
                                                             pathName: formatLibTitle(lib.name),
                                                             groupIndex: 0,
-                                                        }));
-                                                        setSelectedWords(new Set());
-                                                    }}
+                                                        }))
+                                                    }
                                                     className={`flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left text-xs transition-all ${
                                                         isSelected
                                                             ? 'border-white/60 bg-white/20 text-white shadow'
@@ -474,10 +483,7 @@ export default function AmbientSettings({
                                                     <button
                                                         key={g.index}
                                                         type="button"
-                                                        onClick={() => {
-                                                            setDraft((d) => ({ ...d, groupIndex: g.index }));
-                                                            setSelectedWords(new Set());
-                                                        }}
+                                                        onClick={() => setDraft((d) => ({ ...d, groupIndex: g.index }))}
                                                         className={`flex items-center justify-between rounded-lg border px-2.5 py-2 text-left text-xs transition-all ${
                                                             isSel
                                                                 ? 'border-white/60 bg-white/20 font-medium text-white'
