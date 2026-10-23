@@ -24,7 +24,9 @@ export async function GET(request: NextRequest) {
         ? await getFlatLibraries(pathParam)
         : await getLibraryList(pathParam);
 
-    // Get user libraries if authenticated (with error handling)
+    // Get user libraries if authenticated (with error handling).
+    // They are appended to every listing, not just the root: the word list browser shows them in whichever
+    // folder it has open. Pickers that combine several listings should request flat=true instead.
     let userLibraries: any[] = [];
 
     try {
