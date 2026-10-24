@@ -66,8 +66,12 @@ export default function ReadDetailPage() {
 
     // Web Speech API 播放驱动
     const speakTimerRef = useRef<number | null>(null);
+    // 正在朗读的句子。cancel() 会让被打断的旧句子补发事件（Chrome 发 onerror，Safari 发 onend），
+    // 不认这个 ref 的话，点别的句子或调语速会让播放停掉，或者多跳一句
+    const currentUtterRef = useRef<SpeechSynthesisUtterance | null>(null);
 
     const stopSpeech = useCallback(() => {
+        currentUtterRef.current = null;
         if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
             window.speechSynthesis.cancel();
         }
@@ -88,26 +92,28 @@ export default function ReadDetailPage() {
         utter.rate = playbackRate * 0.9;
 
         utter.onend = () => {
-            if (!playing) return;
+            if (currentUtterRef.current !== utter) return;
+            currentUtterRef.current = null;
             // 停顿 600ms 自动播下一句
             speakTimerRef.current = window.setTimeout(() => {
-                setActiveSentenceIdx((prev) => {
-                    if (prev < allSentences.length - 1) {
-                        return prev + 1;
-                    } else {
-                        setPlaying(false);
-                        return prev;
-                    }
-                });
+                speakTimerRef.current = null;
+                if (activeSentenceIdx < allSentences.length - 1) {
+                    setActiveSentenceIdx(activeSentenceIdx + 1);
+                } else {
+                    setPlaying(false);
+                }
             }, 600);
         };
 
-        utter.onerror = () => {
+        utter.onerror = (event) => {
+            if (currentUtterRef.current !== utter || event.error === 'interrupted' || event.error === 'canceled') return;
+            currentUtterRef.current = null;
             setPlaying(false);
         };
 
+        currentUtterRef.current = utter;
         window.speechSynthesis.speak(utter);
-    }, [allSentences, activeSentenceIdx, playbackRate, playing, stopSpeech]);
+    }, [allSentences, activeSentenceIdx, playbackRate, stopSpeech]);
 
     useEffect(() => {
         if (playing) {
