@@ -6,6 +6,7 @@ import { ArrowLeft, Brain, Edit3, Sparkles, BookOpen, Layers, Play } from 'lucid
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useSettings } from '@/context/SettingsContext';
+import { safeReturnPath } from '@/lib/safe-path';
 
 interface LibraryItem {
   name: string;
@@ -29,9 +30,7 @@ export default function QuizMenuPage() {
   // Keep the entry point in the URL so the menu can return to the page that
   // launched it (for example, Home -> 今日复习 -> Home).
   const requestedReturnTo = searchParams.get('from');
-  const returnTo = requestedReturnTo && requestedReturnTo.startsWith('/') && !requestedReturnTo.startsWith('//')
-    ? requestedReturnTo
-    : '/home';
+  const returnTo = safeReturnPath(requestedReturnTo, '/home');
   const returnLabel = returnTo === '/home' ? tc('backToHome') : tc('backToPrevious');
 
   // Settings State

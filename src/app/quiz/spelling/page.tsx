@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useQuizData, type QuizWord } from '@/hooks/useQuizData';
 import { useSettings } from '@/context/SettingsContext';
+import { safeReturnPath } from '@/lib/safe-path';
 
 export default function SpellingQuizPage() {
   const router = useRouter();
@@ -15,9 +16,7 @@ export default function SpellingQuizPage() {
   const tc = useTranslations('quizPages.common');
 
   const requestedReturnTo = searchParams.get('returnTo');
-  const returnTo = requestedReturnTo && requestedReturnTo.startsWith('/') && !requestedReturnTo.startsWith('//')
-    ? requestedReturnTo
-    : '/home';
+  const returnTo = safeReturnPath(requestedReturnTo, '/home');
   const returnLabel = returnTo === '/home' ? tc('backToHome') : tc('backToPrevious');
 
   const source = searchParams.get('source') as any;

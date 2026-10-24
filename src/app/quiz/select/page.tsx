@@ -7,6 +7,7 @@ import { ArrowLeft, BookOpen, Mic } from 'lucide-react';
 import { useForceMobileLayout } from '@/lib/hooks';
 import { useDeviceType } from '@/lib/hooks/useMediaQuery';
 import { useTranslations, useLocale } from 'next-intl';
+import { safeReturnPath } from '@/lib/safe-path';
 
 const MobileLayout = dynamic(() => import('@/components/mobile/MobileLayout'), { ssr: false });
 
@@ -16,9 +17,7 @@ export default function QuizSelectPage() {
     const t = useTranslations();
     const locale = useLocale();
     const requestedReturnTo = searchParams.get('from');
-    const returnTo = requestedReturnTo && requestedReturnTo.startsWith('/') && !requestedReturnTo.startsWith('//')
-        ? requestedReturnTo
-        : '/home';
+    const returnTo = safeReturnPath(requestedReturnTo, '/home');
     const [words, setWords] = useState<string[]>([]);
     const forceMobileLayout = useForceMobileLayout();
     const deviceType = useDeviceType();

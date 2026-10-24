@@ -1,18 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { ensureLocalUser } from '@/lib/auth';
-
-function getSafeNextPath(value: string | null) {
-  if (!value || !value.startsWith('/') || value.startsWith('//')) {
-    return '/home';
-  }
-  return value;
-}
+import { safeReturnPath } from '@/lib/safe-path';
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get('code');
-  const nextPath = getSafeNextPath(requestUrl.searchParams.get('next'));
+  const nextPath = safeReturnPath(requestUrl.searchParams.get('next'));
 
   if (!code) {
     return NextResponse.redirect(new URL('/login?error=missing_code', request.url));
