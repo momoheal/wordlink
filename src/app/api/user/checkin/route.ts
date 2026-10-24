@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSession, ensureLocalUser } from '@/lib/auth';
+import { SERVER_TZ, localDateStr, streakFromDays, streakWindowStart } from '@/lib/streak';
 
 export async function GET() {
   try {
@@ -11,13 +12,13 @@ export async function GET() {
     await ensureLocalUser(session);
 
     const now = new Date();
-    const yearStart = new Date(now.getFullYear(), 0, 1);
+    const since = streakWindowStart(now);
     // timestamp 列为 TIMESTAMP(3)（存 UTC 墙钟），本地日期分桶需先按 UTC
-    // 还原 instant 再转服务器本地时区，与旧代码 getFullYear() 口径一致。
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    // 还原 instant 再转服务器本地时区。
+    const tz = SERVER_TZ;
 
-    // Day-level aggregation pushed into Postgres: ≤365 rows per table for a
-    // full year instead of every quiz/visit record.
+    // Day-level aggregation pushed into Postgres: ≤STREAK_WINDOW_DAYS rows per
+    // table instead of every quiz/visit record.
     const [quizDays, visitDays] = await Promise.all([
       prisma.$queryRaw<{ day: string; total: number; correct: number }[]>`
         SELECT
@@ -25,7 +26,7 @@ export async function GET() {
           COUNT(*)::int AS total,
           COUNT(*) FILTER (WHERE "score" > 0)::int AS correct
         FROM "LPT_english"."QuizRecord"
-        WHERE "userId" = ${session.id} AND "timestamp" >= ${yearStart}
+        WHERE "userId" = ${session.id} AND "timestamp" >= ${since}
         GROUP BY 1
       `,
       prisma.$queryRaw<{ day: string; total: number }[]>`
@@ -33,19 +34,12 @@ export async function GET() {
           to_char("timestamp" AT TIME ZONE 'UTC' AT TIME ZONE ${tz}, 'YYYY-MM-DD') AS day,
           COUNT(*)::int AS total
         FROM "LPT_english"."WordVisit"
-        WHERE "userId" = ${session.id} AND "timestamp" >= ${yearStart}
+        WHERE "userId" = ${session.id} AND "timestamp" >= ${since}
         GROUP BY 1
       `,
     ]);
 
-    const toDateStr = (d: Date) => {
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      return `${y}-${m}-${day}`;
-    };
-
-    const todayStr = toDateStr(now);
+    const todayStr = localDateStr(now);
 
     // Today's quiz stats
     const todayQuizRow = quizDays.find(r => r.day === todayStr);
@@ -56,21 +50,11 @@ export async function GET() {
     const todayVisitCount = visitDays.find(r => r.day === todayStr)?.total ?? 0;
     const todayWordsCount = todayVisitCount + todayQuizCount;
 
-    // Streak: consecutive days with any activity (quiz or visit)
-    const allDates = new Set([
+    // Streak: consecutive days with any activity (quiz or visit), same rule as home and passport
+    const streak = streakFromDays(new Set([
       ...quizDays.map(r => r.day),
       ...visitDays.map(r => r.day),
-    ]);
-    let streak = 0;
-    const checkDate = new Date(now);
-    while (true) {
-      if (allDates.has(toDateStr(checkDate))) {
-        streak++;
-        checkDate.setDate(checkDate.getDate() - 1);
-      } else {
-        break;
-      }
-    }
+    ]), now);
 
     // Monthly: current month, each day's total activity count (quiz + visit, including repeats)
     const monthStartStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
@@ -90,7 +74,7 @@ export async function GET() {
     for (let i = 6; i >= 0; i--) {
       const d = new Date(now);
       d.setDate(d.getDate() - i);
-      weeklyMap[toDateStr(d)] = 0;
+      weeklyMap[localDateStr(d)] = 0;
     }
     for (const r of quizDays) {
       if (r.day in weeklyMap) weeklyMap[r.day] += r.total;

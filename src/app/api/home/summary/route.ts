@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ensureLocalUser, getSession } from '@/lib/auth';
+import { SERVER_TZ, streakFromDays, streakWindowStart } from '@/lib/streak';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,16 +28,10 @@ export async function GET() {
         const now = new Date();
         const dayStart = new Date(now);
         dayStart.setHours(0, 0, 0, 0);
-        const yearStart = new Date(now.getFullYear(), 0, 1);
-        // timestamp 列为 TIMESTAMP(3)（存 UTC 墙钟），JS 端 getFullYear() 等
-        // 本地时间分桶 = 先按 UTC 还原成 instant 再转服务器本地时区。
-        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-
-        const toDateStr = (d: Date) => {
-            const y = d.getFullYear();
-            const m = String(d.getMonth() + 1).padStart(2, '0');
-            return `${y}-${m}-${String(d.getDate()).padStart(2, '0')}`;
-        };
+        const since = streakWindowStart(now);
+        // timestamp 列为 TIMESTAMP(3)（存 UTC 墙钟），本地日期分桶 = 先按 UTC
+        // 还原成 instant 再转服务器本地时区。
+        const tz = SERVER_TZ;
 
         const [dueStates, stageGroups, todayQuiz, recentQuiz, quizDays, visitDays] = await Promise.all([
             // 到期复习队列：按 nextReviewAt 升序，取前 12 个
@@ -64,30 +59,25 @@ export async function GET() {
                 take: 6,
                 select: { word: true, score: true, isCorrect: true, timestamp: true },
             }),
-            // streak 用的活跃日期：DB 端按本地时区去重，全年 ≤365 行
+            // streak 用的活跃日期：DB 端按本地时区去重，≤STREAK_WINDOW_DAYS 行
             prisma.$queryRaw<{ day: string }[]>`
                 SELECT DISTINCT to_char("timestamp" AT TIME ZONE 'UTC' AT TIME ZONE ${tz}, 'YYYY-MM-DD') AS day
                 FROM "LPT_english"."QuizRecord"
-                WHERE "userId" = ${userId} AND "timestamp" >= ${yearStart}
+                WHERE "userId" = ${userId} AND "timestamp" >= ${since}
             `,
             prisma.$queryRaw<{ day: string }[]>`
                 SELECT DISTINCT to_char("timestamp" AT TIME ZONE 'UTC' AT TIME ZONE ${tz}, 'YYYY-MM-DD') AS day
                 FROM "LPT_english"."WordVisit"
-                WHERE "userId" = ${userId} AND "timestamp" >= ${yearStart}
+                WHERE "userId" = ${userId} AND "timestamp" >= ${since}
             `,
         ]);
 
-        // ---- streak 计算（与 /api/user/checkin 同口径）----
+        // ---- streak 计算（与打卡日历、学习护照同口径）----
         const activeDays = new Set<string>([
             ...quizDays.map((r) => r.day),
             ...visitDays.map((r) => r.day),
         ]);
-        let streak = 0;
-        const cursor = new Date(now);
-        while (activeDays.has(toDateStr(cursor))) {
-            streak += 1;
-            cursor.setDate(cursor.getDate() - 1);
-        }
+        const streak = streakFromDays(activeDays, now);
 
         // ---- 阶段分布 ----
         const stageCounts: Record<string, number> = {};

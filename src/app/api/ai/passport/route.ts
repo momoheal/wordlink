@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { getSession, ensureLocalUser } from '@/lib/auth';
+import { SERVER_TZ, streakFromDays } from '@/lib/streak';
 import {
     loadPrompt,
     completeDeepseek,
@@ -37,18 +38,6 @@ export interface PassportPayload {
     cefr: string;
     narrative: string;
     generatedAt: string;
-}
-
-function computeStreakFromDays(daySet: Set<string>): number {
-    let streak = 0;
-    const cursor = new Date();
-    // allow "today not yet active" without breaking yesterday's streak
-    if (!daySet.has(cursor.toISOString().slice(0, 10))) cursor.setDate(cursor.getDate() - 1);
-    while (daySet.has(cursor.toISOString().slice(0, 10))) {
-        streak += 1;
-        cursor.setDate(cursor.getDate() - 1);
-    }
-    return streak;
 }
 
 function estimateCefr(metrics: PassportMetrics): string {
@@ -110,14 +99,13 @@ export async function GET() {
                 FROM "LPT_english"."UserWordState"
                 WHERE "userId" = ${userId}
             `,
-            // timestamp columns are TIMESTAMP(3) holding UTC wall time, so
-            // to_char(..., 'YYYY-MM-DD') matches the previous toISOString()
-            // .slice(0, 10) bucketing exactly.
+            // timestamp columns are TIMESTAMP(3) holding UTC wall time: bucket
+            // into server-local days, the same days home and check-in count.
             prisma.$queryRaw<{ day: string }[]>`
-                SELECT to_char("timestamp", 'YYYY-MM-DD') AS day
+                SELECT to_char("timestamp" AT TIME ZONE 'UTC' AT TIME ZONE ${SERVER_TZ}, 'YYYY-MM-DD') AS day
                 FROM "LPT_english"."QuizRecord" WHERE "userId" = ${userId}
                 UNION
-                SELECT to_char("timestamp", 'YYYY-MM-DD')
+                SELECT to_char("timestamp" AT TIME ZONE 'UTC' AT TIME ZONE ${SERVER_TZ}, 'YYYY-MM-DD')
                 FROM "LPT_english"."WordVisit" WHERE "userId" = ${userId}
             `,
         ]);
@@ -144,7 +132,7 @@ export async function GET() {
             masteredWords: stateAgg.mastered,
             dueForReview: stateAgg.due,
             checkinDays: activityDays.size,
-            streakDays: computeStreakFromDays(activityDays),
+            streakDays: streakFromDays(activityDays, now),
             totalDwellMinutes: Math.round(visitAgg.dwellMs / 60000),
             audioPlays: visitAgg.audioPlays,
         };
