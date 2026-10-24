@@ -1,17 +1,22 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { ensureLocalUser, getSession } from '@/lib/auth';
+import { clientIp, rateLimit, tooManyRequests } from '@/lib/rate-limit';
 
 export async function POST(request: Request) {
     try {
         const body = await request.json().catch(() => null);
         const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
         const password = typeof body?.password === 'string' ? body.password : '';
-        const preferredLanguage = typeof body?.preferredLanguage === 'string' ? body.preferredLanguage : 'zh';
+        const preferredLanguage = body?.preferredLanguage === 'en' ? 'en' : 'zh';
 
         if (!email || !password) {
             return NextResponse.json({ error: 'Missing email or password' }, { status: 400 });
         }
+
+        // 每次注册都会发一封确认邮件：按 IP 限流，防止批量注册和刷邮件额度
+        const gate = rateLimit(`register-ip:${clientIp(request)}`, 10, 10 * 60_000);
+        if (!gate.ok) return tooManyRequests(gate.retryAfterSec);
 
         const origin = request.headers.get('origin') || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
         const nickname = email.split('@')[0] || 'Lexiverse learner';
