@@ -84,14 +84,19 @@ export async function PATCH(
       return addCorsHeaders(response, origin);
     }
 
-    const body = await request.json();
-    const { name, description } = body;
+    const body = await request.json().catch(() => null);
+    // 和导入接口同样的长度上限；类型不对的字段直接忽略，不再让 Prisma 抛 500
+    const name = typeof body?.name === 'string' ? body.name.trim().slice(0, 100) : '';
+    const description = typeof body?.description === 'string'
+      ? body.description.trim().slice(0, 500) || null
+      : body?.description === null ? null : undefined;
 
     const updated = await prisma.userLibrary.update({
       where: { id: id },
       data: {
         ...(name && { name }),
         ...(description !== undefined && { description }),
+        updatedAt: new Date(),
       },
     });
 

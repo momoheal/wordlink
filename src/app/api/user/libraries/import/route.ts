@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleCorsPreflightRequest, addCorsHeaders } from '@/lib/cors';
+import { parseLibraryFileContent } from '@/lib/data';
+
+const MAX_FILE_BYTES = 2 * 1024 * 1024;
+const MAX_NAME_LENGTH = 100;
+const MAX_DESCRIPTION_LENGTH = 500;
 
 /**
  * OPTIONS /api/user/libraries/import
@@ -19,7 +24,7 @@ export async function OPTIONS(request: NextRequest) {
  *
  * Request body(两种皆可):
  *  - JSON: { "name": "Library Name", "description": "Optional", "words": ["word1", ...] }
- *  - multipart/form-data: file(CSV,每行取第一个像单词的列) + name + description
+ *  - multipart/form-data: file(CSV / TXT，按内置词库的规则解析) + name + description
  *
  * Response:
  * {
@@ -52,26 +57,22 @@ export async function POST(request: NextRequest) {
       name = form.get('name');
       description = form.get('description');
       const file = form.get('file');
-      const text = file instanceof File ? await file.text() : '';
-      // CSV 每行取第一个像单词的列(兼容 "序号,单词" 与纯单词两种格式)
-      words = text
-        .split(/\r?\n/)
-        .map((line) =>
-          line
-            .split(',')
-            .map((cell) => cell.trim())
-            .find((cell) => /^[a-zA-Z][a-zA-Z'-]*$/.test(cell)),
-        )
-        .filter(Boolean);
+      if (file instanceof File && file.size > MAX_FILE_BYTES) {
+        const response = NextResponse.json({ error: 'File too large (max 2 MB)' }, { status: 400 });
+        return addCorsHeaders(response, origin);
+      }
+      // 和内置词库同一个解析器：识别表头行（word / 单词…）、引号、Tab 分隔和「1. apple」式编号。
+      // 原来每行取第一个像单词的格子，表头 "word" 会被当成单词导入，带引号的词全部丢掉
+      words = file instanceof File ? parseLibraryFileContent(await file.text()) : [];
     } else {
-      const body = await request.json();
-      name = body.name;
-      description = body.description;
-      words = body.words;
+      const body = await request.json().catch(() => null);
+      name = body?.name;
+      description = body?.description;
+      words = body?.words;
     }
 
     // Validate input
-    if (!name || typeof name !== 'string') {
+    if (typeof name !== 'string' || !name.trim()) {
       const response = NextResponse.json(
         { error: 'Library name is required' },
         { status: 400 }
@@ -146,8 +147,10 @@ export async function POST(request: NextRequest) {
       data: {
         id: crypto.randomUUID(),
         userId: session.id,
-        name: name.trim(),
-        description: typeof description === 'string' && description.trim() ? description.trim() : null,
+        name: name.trim().slice(0, MAX_NAME_LENGTH),
+        description: typeof description === 'string' && description.trim()
+          ? description.trim().slice(0, MAX_DESCRIPTION_LENGTH)
+          : null,
         wordCount: normalizedWords.length,
         updatedAt: new Date(),
         UserLibraryWord: {
