@@ -1,59 +1,25 @@
-'use server';
-
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { ensureLocalUser, getSession } from '@/lib/auth';
+import { getSession } from '@/lib/auth';
 
+/**
+ * GET /api/ai/context —— AI 助手开场白里「我已获取你的学习数据」用到的计数。
+ * 学习数据本身由 /api/ai/chat 在服务器端按会话模式取用，不经过浏览器。
+ */
 export async function GET() {
     try {
         const session = await getSession();
-
         if (!session) {
-            return NextResponse.json({
-                recentHistory: [],
-                recentTests: [],
-                currentWord: null
-            });
+            return NextResponse.json({ historyCount: 0, testCount: 0 });
         }
 
-        await ensureLocalUser(session);
-
-        // Fetch recent history (last 1000 records)
-        const recentHistory = await prisma.wordVisit.findMany({
-            where: { userId: session.id },
-            orderBy: { timestamp: 'desc' },
-            take: 1000,
-            select: {
-                word: true,
-                timestamp: true,
-            }
-        });
-
-        // Fetch recent test records (last 1000 records)
-        const recentTests = await prisma.quizRecord.findMany({
-            where: { userId: session.id },
-            orderBy: { timestamp: 'desc' },
-            take: 1000,
-            select: {
-                word: true,
-                score: true,
-                testType: true,
-                timestamp: true,
-            }
-        });
-
-        return NextResponse.json({
-            recentHistory,
-            recentTests,
-            currentWord: null,
-        });
+        const [historyCount, testCount] = await Promise.all([
+            prisma.wordVisit.count({ where: { userId: session.id } }),
+            prisma.quizRecord.count({ where: { userId: session.id } }),
+        ]);
+        return NextResponse.json({ historyCount, testCount });
     } catch (error) {
         console.error('AI context API error:', error);
-        return NextResponse.json({
-            recentHistory: [],
-            recentTests: [],
-            currentWord: null,
-            error: 'Failed to fetch context'
-        });
+        return NextResponse.json({ historyCount: 0, testCount: 0, error: 'Failed to fetch context' });
     }
 }

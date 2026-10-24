@@ -26,24 +26,13 @@ export interface DailyQuota {
     limit: number;
 }
 
-// aiChat 直接数 chat_messages（经 chat_sessions 归属到用户）；ambientGenerate 走
-// UsageLog（AmbientArticle 是全局共享文章库，无用户归属字段），由 generate 路由
-// 在成功响应前写入。
+// 两种额度都数 UsageLog：由各自的路由在上游模型接受请求之后写入。
+// aiChat 不能直接数 chat_messages——用户删掉会话，消息跟着级联删除，额度就被「退」回来了。
 export async function checkDailyQuota(userId: string, kind: QuotaKind): Promise<DailyQuota> {
     const limit = FREE_DAILY_LIMITS[kind];
-    const since = startOfToday();
-    const used =
-        kind === 'aiChat'
-            ? await prisma.chat_messages.count({
-                  where: {
-                      role: 'user',
-                      createdAt: { gte: since },
-                      chat_sessions: { userId },
-                  },
-              })
-            : await prisma.usageLog.count({
-                  where: { userId, kind, createdAt: { gte: since } },
-              });
+    const used = await prisma.usageLog.count({
+        where: { userId, kind, createdAt: { gte: startOfToday() } },
+    });
     return { allowed: used < limit, used, limit };
 }
 

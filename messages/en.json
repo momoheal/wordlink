@@ -450,6 +450,7 @@
     "send": "Send",
     "thinking": "Thinking...",
     "error": "AI response error",
+    "rateLimited": "Too many messages in a row. Please wait a moment and try again.",
     "categories": {
       "word": "Word",
       "wordGroup": "Word Group",

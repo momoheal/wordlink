@@ -3,10 +3,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { cachedFetch } from '@/lib/client-cache';
 
+/** 学习数据的规模，只用于开场白；数据本身由服务器在对话时按会话模式取用 */
 interface UserContext {
-    recentHistory: { word: string; timestamp: string }[];
-    recentTests: { word: string; score: number; testType: number; timestamp: string }[];
-    currentWord?: string;
+    historyCount: number;
+    testCount: number;
 }
 
 interface AIContextType {

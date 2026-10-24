@@ -1,48 +1,92 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { randomUUID } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { ensureLocalUser, getSession, isPro } from '@/lib/auth';
-import { checkDailyQuota, quotaExceededResponse } from '@/lib/quota';
+import { checkDailyQuota, quotaExceededResponse, recordUsage } from '@/lib/quota';
 import { rateLimit, tooManyRequests } from '@/lib/rate-limit';
-import fs from 'fs';
-import path from 'path';
+import { loadPrompt, streamDeepseek, LlmError, type ChatMessage } from '@/lib/ai/gateway';
 
-// --- Types ---
-interface ChatRequest {
-    messages: { role: string; content: string }[];
-    newMessage: string; // The confusing part: 'messages' usually contains history. 'newMessage' is the one to save.
-    model?: string;
-    word?: string;
-    category?: number;
-    sessionId?: string;
-    wordGroup?: string; // Comma separated
-    userContext?: any;
+/** 每次带给模型的历史条数。历史从数据库读，不用客户端传来的（客户端可以随意伪造） */
+const HISTORY_LIMIT = 20;
+const MAX_MESSAGE_CHARS = 4000;
+
+const DEFAULT_MODEL = process.env.LLM_MODEL || 'deepseek-ai/DeepSeek-V3.2';
+// 前端的两个选项映射到环境变量配置的模型；其他值一律用默认模型，客户端不能指定任意（高价）模型
+const MODEL_CHOICES: Record<string, { model: string; temperature: number }> = {
+    'deepseek-chat': { model: DEFAULT_MODEL, temperature: 1.3 },
+    // 推理模型官方建议温度 0.6 左右，太高容易跑题
+    'deepseek-reasoner': { model: process.env.LLM_MODEL_REASONER || 'deepseek-ai/DeepSeek-R1', temperature: 0.6 },
+};
+
+/**
+ * 学习数据摘要：单词模式只看这个词，词组模式只看组内的词，全局模式看最近的整体记录。
+ * 只取最近的一部分，避免全局模式每条消息都把上千条记录塞进 prompt。
+ */
+async function buildUserContext(userId: string, words: string[] | null): Promise<string> {
+    const wordFilter = words ? { word: { in: words } } : {};
+    const [visits, tests, template] = await Promise.all([
+        prisma.wordVisit.findMany({
+            where: { userId, ...wordFilter },
+            orderBy: { timestamp: 'desc' },
+            take: 500,
+            select: { word: true },
+        }),
+        prisma.quizRecord.findMany({
+            where: { userId, ...wordFilter },
+            orderBy: { timestamp: 'desc' },
+            take: 50,
+            select: { word: true, score: true },
+        }),
+        loadPrompt('user_context.txt'),
+    ]);
+    const studied = [...new Set(visits.map((v) => v.word))].slice(0, 100);
+    return template
+        .replace(/\{\{historyCount\}\}/g, String(studied.length))
+        .replace(/\{\{historyList\}\}/g, studied.join(', ') || 'None')
+        .replace(/\{\{quizCount\}\}/g, String(tests.length))
+        .replace(/\{\{quizList\}\}/g, tests.map((t) => `${t.word}(score:${t.score})`).join(', ') || 'None');
 }
 
-// --- Helper Functions ---
-// function loadPrompt(filename: string) {
-//     try {
-//         const promptPath = path.join(process.cwd(), 'data', 'ai_prompts', filename);
-// 提示词内容在进程生命周期内不变：模块级缓存，避免每个请求重复读盘
-const promptCache = new Map<string, string>();
+async function buildSystemPrompt(
+    userId: string,
+    category: number,
+    word: string | null,
+    groupWords: string[],
+    lang: 'zh' | 'en',
+): Promise<string> {
+    let prompt: string;
+    let contextWords: string[] | null = null;
 
-async function loadPrompt(filename: string): Promise<string> {
-    const cached = promptCache.get(filename);
-    if (cached !== undefined) return cached;
-    try {
-        const filePath = path.join(process.cwd(), 'data', 'ai_prompts', filename);
-        const content = await fs.promises.readFile(filePath, 'utf8');
-        promptCache.set(filename, content);
-        return content;
-    } catch (error) {
-        console.error(`Error loading prompt ${filename}:`, error);
-        // Fallbacks（失败不缓存，文件补齐后仍可加载）
-        if (filename === 'vocabulary_tutor.txt') return 'You are a helpful English vocabulary tutor.';
-        return '';
+    if (category === 2 && groupWords.length > 0) {
+        // 词组模式用专门的模板替换基础家教 prompt
+        prompt = (await loadPrompt('word_group_tutor.txt')).replace(/\{\{wordList\}\}/g, groupWords.join(', '));
+        contextWords = groupWords;
+    } else {
+        prompt = (await loadPrompt('vocabulary_tutor.txt')) || 'You are a helpful English vocabulary tutor.';
+        if (category === 1 && word) {
+            prompt += '\n\n' + (await loadPrompt('word_context.txt')).replace(/\{\{word\}\}/g, word);
+            contextWords = [word.toLowerCase()];
+        }
     }
+
+    // 单词 / 词组 / 全局模式附上学习数据，「其他」模式不带
+    if (category === 1 || category === 2 || category === 3) {
+        const context = await buildUserContext(userId, contextWords);
+        prompt = prompt.includes('{{userContext}}')
+            ? prompt.replace(/\{\{userContext\}\}/g, context)
+            : `${prompt}\n\n${context}`;
+    }
+
+    return `${prompt}\n\n${lang === 'zh' ? 'Always reply in Simplified Chinese (简体中文).' : 'Reply in English.'}`;
 }
 
-// --- Main Handler ---
+/**
+ * POST /api/ai/chat —— 流式 AI 对话。
+ * 请求体：{ newMessage, sessionId?, model?, category?, word?, wordGroup?, title? }
+ * sessionId 为空时新建会话；后四项只在新建时使用，已有会话沿用自己的模式和单词。
+ * 响应是 SSE：先发 {type:'session', id, title}，再逐段发 {type:'text', content}，最后 [DONE]。
+ */
 export async function POST(request: NextRequest) {
     const session = await getSession();
     if (!session) {
@@ -68,242 +112,149 @@ export async function POST(request: NextRequest) {
         : (session.preferredLanguage === 'zh' ? 'zh' : 'en');
 
     try {
-        const body: ChatRequest = await request.json();
-        const {
-            messages: rawMessages,
-            newMessage: rawNewMessage,
-            model = 'deepseek-chat',
-            word: rawWord,
-            wordGroup: rawWordGroup,
-            userContext,
-        } = body;
-        let { category = 4, sessionId } = body;
-
-        // 输入长度硬上限：防止超长 prompt 消耗 token
-        const newMessage = String(rawNewMessage || '').slice(0, 4000);
-        const word = rawWord ? String(rawWord).slice(0, 100) : rawWord;
-        const wordGroup = rawWordGroup ? String(rawWordGroup).slice(0, 500) : rawWordGroup;
-        const messages = (Array.isArray(rawMessages) ? rawMessages : [])
-            .slice(-20)
-            .map((m) => ({ role: String(m.role), content: String(m.content || '').slice(0, 4000) }));
-
-        // 1. Session Management
-        let chatSession;
-        if (sessionId) {
-            chatSession = await prisma.chat_sessions.findUnique({
-                where: { id: sessionId },
-            });
-            // If session not found or belongs to another user, create new
-            if (!chatSession || chatSession.userId !== session.id) {
-                sessionId = undefined;
-                chatSession = null;
-            }
+        const body = await request.json().catch(() => null);
+        const newMessage = typeof body?.newMessage === 'string' ? body.newMessage.trim().slice(0, MAX_MESSAGE_CHARS) : '';
+        if (!newMessage) {
+            return NextResponse.json({ error: 'Missing message' }, { status: 400 });
         }
+        const choice = MODEL_CHOICES[typeof body?.model === 'string' ? body.model : ''] ?? MODEL_CHOICES['deepseek-chat'];
 
-        if (!sessionId) {
-            let title = '新对话';
-            if (category === 1 && word) title = `单词: ${word}`;
-            if (category === 2 && wordGroup) title = '单词组学习';
-            if (category === 3) title = '全局调用';
+        // 已有会话：只认自己的，模式和单词以数据库为准
+        const existing = typeof body?.sessionId === 'string'
+            ? await prisma.chat_sessions.findFirst({ where: { id: body.sessionId, userId: session.id } })
+            : null;
 
-            chatSession = await prisma.chat_sessions.create({
-                data: {
-                    id: `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                    userId: session.id,
-                    title,
-                    category,
-                    word: category === 1 ? word : undefined,
-                    wordGroup: category === 2 ? wordGroup : undefined,
-                    updatedAt: new Date()
-                }
-            });
-            sessionId = chatSession.id;
-        } else {
-            // Update timestamp
-            await prisma.chat_sessions.update({
-                where: { id: sessionId },
-                data: { updatedAt: new Date() }
-            });
-        }
+        const category = existing?.category ?? ([1, 2, 3, 4].includes(body?.category) ? (body.category as number) : 4);
+        const word: string | null = (existing ? existing.word : typeof body?.word === 'string' ? body.word.trim().slice(0, 100) : '') || null;
+        const wordGroup: string | null = (existing ? existing.wordGroup : typeof body?.wordGroup === 'string' ? body.wordGroup.slice(0, 500) : '') || null;
+        const groupWords = (wordGroup ?? '')
+            .split(',')
+            .map((w) => w.trim().toLowerCase())
+            .filter(Boolean)
+            .slice(0, 50);
 
-        // 2. Persist User Message
-        await prisma.chat_messages.create({
-            data: {
-                id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                sessionId: sessionId!,
-                role: 'user',
-                content: newMessage,
-            }
-        });
+        const [systemPrompt, history] = await Promise.all([
+            buildSystemPrompt(session.id, category, word, groupWords, lang),
+            existing
+                ? prisma.chat_messages.findMany({
+                    where: { sessionId: existing.id },
+                    orderBy: { createdAt: 'desc' },
+                    take: HISTORY_LIMIT,
+                    select: { role: true, content: true },
+                })
+                : Promise.resolve([]),
+        ]);
 
-        // 3. Construct System Prompt
-        let systemPrompt = await loadPrompt('vocabulary_tutor.txt');
-
-        if (category === 1 && word) {
-            const wordContextTemplate = await loadPrompt('word_context.txt');
-            systemPrompt += '\n\n' + wordContextTemplate.replace(/\{\{word\}\}/g, word);
-        }
-
-        if (category === 2 && wordGroup) {
-            // For Category 2, we Override the base 'vocabulary_tutor' with 'word_group_tutor'
-            const groupTemplate = await loadPrompt('word_group_tutor.txt');
-            systemPrompt = groupTemplate.replace(/\{\{wordList\}\}/g, wordGroup.split(',').join(', '));
-        }
-
-        // Inject User Context for BOTH Category 1 and 3 (and potentially others if useful)
-        // Previous logic restricted it to Category 3 only.
-        // Inject User Context for Category 1, 2, and 3
-        // IMPORTANT: Filter context based on mode
-        if (userContext && (category === 1 || category === 2 || category === 3)) {
-            const userContextTemplate = await loadPrompt('user_context.txt');
-
-            let filteredHistory = userContext.recentHistory || [];
-            let filteredTests = userContext.recentTests || [];
-
-            // Category 1: Filter to only THIS word
-            if (category === 1 && word) {
-                filteredHistory = filteredHistory.filter((h: any) => h.word?.toLowerCase() === word.toLowerCase());
-                filteredTests = filteredTests.filter((t: any) => t.word?.toLowerCase() === word.toLowerCase());
-            }
-            // Category 2: Filter to only words in the group
-            else if (category === 2 && wordGroup) {
-                const groupWords = wordGroup.split(',').map((w: string) => w.trim().toLowerCase());
-                filteredHistory = filteredHistory.filter((h: any) => groupWords.includes(h.word?.toLowerCase()));
-                filteredTests = filteredTests.filter((t: any) => groupWords.includes(t.word?.toLowerCase()));
-            }
-            // Category 3: Use all data (no filtering)
-
-            const historyList = filteredHistory.slice(0, 1000).map((h: any) => h.word).filter((w: string, i: number, arr: string[]) => arr.indexOf(w) === i).join(', ') || 'None';
-            const quizList = filteredTests.slice(0, 1000).map((q: any) => `${q.word}(score:${q.score})`).join(', ') || 'None';
-
-            const filled = userContextTemplate
-                .replace(/\{\{historyCount\}\}/g, String(filteredHistory.length || 0))
-                .replace(/\{\{historyList\}\}/g, historyList)
-                .replace(/\{\{quizCount\}\}/g, String(filteredTests.length || 0))
-                .replace(/\{\{quizList\}\}/g, quizList);
-            systemPrompt += '\n\n' + filled;
-        }
-
-        // 4. API Call
-        systemPrompt += '\n\n' + (lang === 'zh'
-            ? 'Always reply in Simplified Chinese (简体中文).'
-            : 'Reply in English.');
-
-        const fullMessages = [
+        const fullMessages: ChatMessage[] = [
             { role: 'system', content: systemPrompt },
-            ...messages, // History
-            { role: 'user', content: newMessage } // Current
+            ...history.reverse().map((m): ChatMessage => ({
+                role: m.role === 'assistant' ? 'assistant' : 'user',
+                content: m.content.slice(0, MAX_MESSAGE_CHARS),
+            })),
+            { role: 'user', content: newMessage },
         ];
 
-        const encoder = new TextEncoder();
-        const responseStream = new TransformStream();
-        const writer = responseStream.writable.getWriter();
-
-        // Write session ID immediately
-        writer.write(encoder.encode(`data: ${JSON.stringify({ type: 'session', id: sessionId })}\n\n`));
-
-        // Start LLM (SiliconFlow) Fetch
-        // model 白名单：只允许环境变量配置的模型，防止客户端指定高价模型
-        const allowedModels = new Set(
-            [process.env.LLM_MODEL, process.env.LLM_MODEL_FAST].filter(Boolean) as string[]
-        );
-        const requestedModel = model === 'deepseek-chat'
-            ? (process.env.LLM_MODEL || 'deepseek-ai/DeepSeek-V3.2')
-            : model;
-        const resolvedModel = allowedModels.has(requestedModel)
-            ? requestedModel
-            : (process.env.LLM_MODEL || 'deepseek-ai/DeepSeek-V3.2');
-
-        const llmRes = await fetch(`${process.env.LLM_BASE_URL || 'https://api.siliconflow.cn/v1'}/chat/completions`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${process.env.SILICONFLOW_APIKEY || process.env.DEEPSEEK_APIKEY}`,
-            },
-            body: JSON.stringify({
-                model: resolvedModel,
-                messages: fullMessages,
-                stream: true,
-                temperature: 1.3,
-                max_tokens: 2048,
-            }),
-        });
-
-        if (!llmRes.ok) {
-            const errText = await llmRes.text();
-            throw new Error(`LLM API error: ${llmRes.status} ${errText}`);
+        // 先确认模型接受了请求，再建会话、存消息、记额度：上游失败（余额不足、超时……）不占用户的免费次数
+        const upstream = new AbortController();
+        let deltas: AsyncGenerator<string>;
+        try {
+            deltas = await streamDeepseek(fullMessages, {
+                model: choice.model,
+                temperature: choice.temperature,
+                maxTokens: 2048,
+                signal: upstream.signal,
+            });
+        } catch (e) {
+            console.error('[ai/chat] LLM request failed:', e);
+            const status = e instanceof LlmError ? e.status : 0;
+            return NextResponse.json({ error: status ? `LLM request failed (${status})` : 'LLM request failed' }, { status: 502 });
         }
 
-        // 5. Stream Processing & Persistence
-        // We handle the stream reading, passthrough, and accumulation here.
-        // Important: we must NOT await the database save inside the critical path of a chunk if possible, 
-        // but we DO need to await it before closing the stream to ensure it runs.
-
-        (async () => {
-            const reader = llmRes.body?.getReader();
-            if (!reader) { writer.close(); return; }
-
-            const decoder = new TextDecoder();
-            let fullContent = '';
-
-            try {
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-
-                    const chunk = decoder.decode(value);
-                    const lines = chunk.split('\n');
-
-                    for (const line of lines) {
-                        if (line.startsWith('data: ')) {
-                            const data = line.slice(6).trim();
-                            if (data === '[DONE]') continue;
-
-                            try {
-                                const parsed = JSON.parse(data);
-                                const content = parsed.choices?.[0]?.delta?.content || '';
-                                if (content) {
-                                    fullContent += content;
-                                    // Send delta to frontend
-                                    const payload = JSON.stringify({ type: 'text', content });
-                                    await writer.write(encoder.encode(`data: ${payload}\n\n`));
-                                }
-                            } catch { }
-                        }
-                    }
-                }
-            } finally {
-                // 6. Save Assistant Message (The Grand Finale)
-                if (fullContent && sessionId) {
-                    try {
-                        await prisma.chat_messages.create({
-                            data: {
-                                id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                                sessionId,
-                                role: 'assistant',
-                                content: fullContent
-                            }
-                        });
-                        console.log(`Saved assistant message for session ${sessionId}`);
-                    } catch (e) {
-                        console.error('Failed to save assistant message:', e);
-                        // We can also send an error event to frontend if we want
-                    }
-                }
-                await writer.write(encoder.encode('data: [DONE]\n\n'));
-                await writer.close();
+        let chatSession;
+        try {
+            const now = new Date();
+            if (existing) {
+                chatSession = await prisma.chat_sessions.update({ where: { id: existing.id }, data: { updatedAt: now } });
+            } else {
+                // 单词 / 词组会话用前端按界面语言起的标题，其余用第一句话当标题
+                const clientTitle = typeof body?.title === 'string' ? body.title.trim().slice(0, 60) : '';
+                const title = (category === 1 || category === 2) && clientTitle ? clientTitle : newMessage.slice(0, 40);
+                chatSession = await prisma.chat_sessions.create({
+                    data: {
+                        id: `session_${randomUUID()}`,
+                        userId: session.id,
+                        title,
+                        category,
+                        word: category === 1 ? word : null,
+                        wordGroup: category === 2 ? wordGroup : null,
+                        updatedAt: now,
+                    },
+                });
             }
-        })();
+            await prisma.chat_messages.create({
+                data: { id: `msg_${randomUUID()}`, sessionId: chatSession.id, role: 'user', content: newMessage },
+            });
+            await recordUsage(session.id, 'aiChat');
+        } catch (e) {
+            upstream.abort();
+            throw e;
+        }
 
-        return new NextResponse(responseStream.readable, {
-            headers: {
-                'Content-Type': 'text/event-stream',
-                'Cache-Control': 'no-cache',
-                'Connection': 'keep-alive',
+        const { id: sessionId, title } = chatSession;
+        const encoder = new TextEncoder();
+        const stream = new ReadableStream<Uint8Array>({
+            async start(controller) {
+                const send = (data: string) => {
+                    try {
+                        controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+                    } catch {
+                        /* 浏览器已经断开 */
+                    }
+                };
+                send(JSON.stringify({ type: 'session', id: sessionId, title }));
+
+                let reply = '';
+                try {
+                    for await (const delta of deltas) {
+                        reply += delta;
+                        send(JSON.stringify({ type: 'text', content: delta }));
+                    }
+                } catch (e) {
+                    if (!upstream.signal.aborted) {
+                        console.error('[ai/chat] stream interrupted:', e);
+                        send(JSON.stringify({ type: 'error' }));
+                    }
+                }
+
+                // 中途停止或断开也保存已经生成的部分，和用户在界面上看到的一致
+                if (reply) {
+                    await prisma.chat_messages
+                        .create({ data: { id: `msg_${randomUUID()}`, sessionId, role: 'assistant', content: reply } })
+                        .catch((e) => console.error('[ai/chat] failed to save reply:', e));
+                }
+                send('[DONE]');
+                try {
+                    controller.close();
+                } catch {
+                    /* 已经关闭 */
+                }
+            },
+            // 用户点了停止或关掉页面：立刻断开上游，不再白白生成
+            cancel() {
+                upstream.abort();
             },
         });
 
-    } catch (error: any) {
+        return new Response(stream, {
+            headers: {
+                'Content-Type': 'text/event-stream; charset=utf-8',
+                'Cache-Control': 'no-cache, no-transform',
+                Connection: 'keep-alive',
+                // 反向代理（nginx）默认会缓冲整段响应，流式输出就变成一次性吐出
+                'X-Accel-Buffering': 'no',
+            },
+        });
+    } catch (error) {
         console.error('Chat API Error:', error);
         return NextResponse.json({ error: 'Chat API Error' }, { status: 500 });
     }

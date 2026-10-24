@@ -7,6 +7,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useAI } from './AIProvider';
 import { useSettings } from '@/context/SettingsContext';
+import { readChatEvents } from '@/lib/ai/chat-events';
 import { useLocale, useTranslations } from 'next-intl';
 
 interface Message {
@@ -24,6 +25,19 @@ interface LocalSession {
     wordGroup?: string;
     messages: Message[];
     createdAt: Date;
+    /** 已存到服务器（发出过消息）；否则是还没发消息的本地草稿，id 是本地生成的 */
+    persisted: boolean;
+    /** 服务器会话的消息是否已经取回（列表接口不带消息正文） */
+    loaded: boolean;
+}
+
+interface ServerSession {
+    id: string;
+    title: string;
+    category: number;
+    word: string | null;
+    wordGroup: string | null;
+    createdAt: string;
 }
 
 const MIN_WIDTH = 480;
@@ -86,6 +100,10 @@ export default function AIChatWindow() {
     // Current session
     const currentSession = sessions.find(s => s.id === currentSessionId);
     const messages = currentSession?.messages || [];
+    const historyLoading = !!currentSession && currentSession.persisted && !currentSession.loaded;
+
+    // 服务器会话列表取回之前不自动新建会话，否则打开一个聊过的词会多出一个空会话
+    const [sessionsLoaded, setSessionsLoaded] = useState(false);
 
     // Load sessions from server
     const fetchSessions = async () => {
@@ -94,15 +112,30 @@ export default function AIChatWindow() {
                 credentials: 'include'
             });
             if (res.ok) {
-                const data = await res.json();
-                setSessions(data.map((s: any) => ({
-                    ...s,
-                    messages: s.messages || [],
-                    createdAt: new Date(s.createdAt)
-                })));
+                const data: ServerSession[] = await res.json();
+                const serverIds = new Set(data.map(s => s.id));
+                setSessions(prev => {
+                    // 已经取回消息的会话沿用本地那份；本地草稿和刚存上服务器的会话保留在前面
+                    const known = new Map(prev.filter(s => s.persisted).map(s => [s.id, s]));
+                    const localOnly = prev.filter(s => !s.persisted || (s.loaded && !serverIds.has(s.id)));
+                    const server = data.map((s): LocalSession => known.get(s.id) ?? {
+                        id: s.id,
+                        title: s.title,
+                        category: s.category,
+                        word: s.word ?? undefined,
+                        wordGroup: s.wordGroup ?? undefined,
+                        messages: [],
+                        createdAt: new Date(s.createdAt),
+                        persisted: true,
+                        loaded: false,
+                    });
+                    return [...localOnly, ...server];
+                });
             }
         } catch (error) {
             console.error('Failed to load sessions:', error);
+        } finally {
+            setSessionsLoaded(true);
         }
     };
 
@@ -111,6 +144,34 @@ export default function AIChatWindow() {
             fetchSessions();
         }
     }, [isOpen]);
+
+    // 选中一个服务器会话时取回它的消息
+    const loadingSessionIds = useRef(new Set<string>());
+    useEffect(() => {
+        const target = sessions.find(s => s.id === currentSessionId);
+        if (!target || !target.persisted || target.loaded || loadingSessionIds.current.has(target.id)) return;
+        const id = target.id;
+        loadingSessionIds.current.add(id);
+        fetch(`/api/ai/sessions/${encodeURIComponent(id)}`, { credentials: 'include' })
+            .then(async res => {
+                if (res.status === 404) {
+                    // 已在别处删除
+                    setSessions(prev => prev.filter(s => s.id !== id));
+                    if (currentSessionIdRef.current === id) setCurrentSessionId(null);
+                    return;
+                }
+                const data: { messages?: { role: string; content: string }[] } | null = res.ok ? await res.json() : null;
+                const loaded = (data?.messages ?? []).map((m): Message => ({
+                    role: m.role === 'user' ? 'user' : 'assistant',
+                    content: m.content,
+                }));
+                setSessions(prev => prev.map(s => (s.id === id ? { ...s, messages: loaded, loaded: true } : s)));
+            })
+            .catch(() => {
+                setSessions(prev => prev.map(s => (s.id === id ? { ...s, loaded: true } : s)));
+            })
+            .finally(() => loadingSessionIds.current.delete(id));
+    }, [currentSessionId, sessions]);
 
     // Load window position
     useEffect(() => {
@@ -164,7 +225,7 @@ export default function AIChatWindow() {
 
     // Auto-create/switch session
     useEffect(() => {
-        if (!isOpen) return;
+        if (!isOpen || !sessionsLoaded) return;
         if (currentWord && currentWord !== lastWordRef.current) {
             lastWordRef.current = currentWord;
             const existingSession = sessions.find(s => s.category === 1 && s.word === currentWord);
@@ -180,14 +241,14 @@ export default function AIChatWindow() {
         } else if (!currentSessionId && sessions.length > 0) {
             setCurrentSessionId(sessions[0].id);
         }
-    }, [isOpen, currentWord, currentWordGroup, sessions.length]);
+    }, [isOpen, sessionsLoaded, currentWord, currentWordGroup, sessions.length]);
 
     const getGreeting = (category: number, contextData?: string) => {
         const isZh = locale === 'zh';
-        const contextInfo = userContext && (userContext.recentHistory?.length > 0 || userContext.recentTests?.length > 0)
+        const contextInfo = userContext && (userContext.historyCount > 0 || userContext.testCount > 0)
             ? (isZh
-                ? `\n\n📊 我已获取你的学习数据 (${userContext.recentHistory?.length || 0}条浏览记录, ${userContext.recentTests?.length || 0}条测试记录)`
-                : `\n\n📊 I have loaded your study data (${userContext.recentHistory?.length || 0} history, ${userContext.recentTests?.length || 0} test records)`)
+                ? `\n\n📊 我已获取你的学习数据 (${userContext.historyCount}条浏览记录, ${userContext.testCount}条测试记录)`
+                : `\n\n📊 I have loaded your study data (${userContext.historyCount} history, ${userContext.testCount} test records)`)
             : '';
 
         if (category === 1 && contextData) {
@@ -214,7 +275,7 @@ export default function AIChatWindow() {
             : `👋 Hello! I am your AI English Study Assistant.\n\nI can help you:\n- Explain meanings and usages\n- Provide memory tips and examples\n- Analyze your learning progress${contextInfo}\n\nWhat would you like to explore?`;
     };
 
-    const createLocalSession = async (category: number = 4, word?: string, wordGroup?: string) => {
+    const createLocalSession = (category: number = 4, word?: string, wordGroup?: string): LocalSession => {
         const id = generateId();
         const isZh = locale === 'zh';
         let title = isZh ? '新对话' : 'New Chat';
@@ -232,21 +293,27 @@ export default function AIChatWindow() {
             wordGroup,
             messages: [initialMessage],
             createdAt: new Date(),
+            persisted: false,
+            loaded: true,
         };
         setSessions(prev => [newSession, ...prev]);
         setCurrentSessionId(id);
-        return id;
+        currentSessionIdRef.current = id;
+        return newSession;
     };
 
     const deleteLocalSession = async (sessionId: string) => {
+        const target = sessions.find(s => s.id === sessionId);
         setSessions(prev => prev.filter(s => s.id !== sessionId));
         if (currentSessionId === sessionId) {
             const remaining = sessions.filter(s => s.id !== sessionId);
             setCurrentSessionId(remaining.length > 0 ? remaining[0].id : null);
         }
+        // 本地草稿从没存到服务器，不用通知
+        if (!target?.persisted) return;
 
         try {
-            await fetch(`/api/ai/sessions/${sessionId}`, {
+            await fetch(`/api/ai/sessions/${encodeURIComponent(sessionId)}`, {
                 method: 'DELETE',
                 credentials: 'include'
             });
@@ -255,8 +322,20 @@ export default function AIChatWindow() {
         }
     };
 
-    const updateSessionMessages = (sessionId: string, newMessages: Message[]) => {
-        setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, messages: newMessages } : s));
+    // 追加而不是整体替换：取回历史、流式回复等更新可能交错发生
+    const appendMessages = (sessionId: string, added: Message[]) => {
+        setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, messages: [...s.messages, ...added] } : s));
+    };
+
+    // 第一条消息发出后服务器才建会话：把本地草稿换成服务器的 id 和标题，之后的消息都发到这个会话
+    const adoptServerSession = (localId: string, serverId: string, title?: string) => {
+        setSessions(prev => prev.map(s => s.id === localId
+            ? { ...s, id: serverId, title: title || s.title, persisted: true, loaded: true }
+            : s));
+        if (currentSessionIdRef.current === localId) {
+            currentSessionIdRef.current = serverId;
+            setCurrentSessionId(serverId);
+        }
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -264,95 +343,72 @@ export default function AIChatWindow() {
     };
 
     const sendMessage = async () => {
-        if (!input.trim() || isLoading) return;
+        if (!input.trim() || isLoading || historyLoading) return;
         const newMessage = input.trim();
-        let sessionId = currentSessionId;
+        const target = currentSession ?? createLocalSession(currentWord ? 1 : 3, currentWord || undefined);
+        let sessionId = target.id;
 
-        if (!sessionId) {
-            const category = currentWord ? 1 : 3;
-            sessionId = await createLocalSession(category, currentWord || undefined);
-        }
-
-        const currentMsgs = sessions.find(s => s.id === sessionId)?.messages || [];
-        const newMessages: Message[] = [...currentMsgs, { role: 'user', content: newMessage }];
-        updateSessionMessages(sessionId!, newMessages);
+        appendMessages(sessionId, [{ role: 'user', content: newMessage }]);
         setInput('');
         setIsLoading(true);
-        if (currentSessionIdRef.current === sessionId) setStreamingContent('');
-        abortControllerRef.current = new AbortController();
+        setStreamingContent('');
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
 
+        let reply = '';
+        let failure: Message | null = null;
         try {
+            // 历史和学习数据都由服务器从数据库取，这里只发新消息和会话信息
             const response = await fetch('/api/ai/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    messages: currentMsgs,
+                    sessionId: target.persisted ? target.id : undefined,
                     newMessage,
                     model: selectedModel,
-                    word: currentSession?.word || currentWord,
-                    wordGroup: currentSession?.wordGroup || currentWordGroup,
-                    category: currentSession?.category || 4,
-                    sessionId,
-                    userContext,
+                    category: target.category,
+                    word: target.word,
+                    wordGroup: target.wordGroup,
+                    title: target.title,
                 }),
-                signal: abortControllerRef.current.signal,
+                signal: controller.signal,
                 credentials: 'include'
             });
 
-            if (!response.ok) {
-                if (response.status === 402) {
-                    const data = await response.json().catch(() => null);
-                    updateSessionMessages(sessionId!, [
-                        ...newMessages,
-                        { role: 'assistant', content: '', kind: 'paywall', quota: { used: data?.used, limit: data?.limit } },
-                    ]);
-                    return;
-                }
-                throw new Error('Failed to get response');
+            if (response.status === 402) {
+                const data = await response.json().catch(() => null);
+                failure = { role: 'assistant', content: '', kind: 'paywall', quota: { used: data?.used, limit: data?.limit } };
+                return;
+            }
+            if (response.status === 429) {
+                failure = { role: 'assistant', content: t('ai.rateLimited') };
+                return;
+            }
+            if (!response.ok || !response.body) {
+                throw new Error(`Chat request failed (${response.status})`);
             }
 
-            const reader = response.body?.getReader();
-            const decoder = new TextDecoder();
-            let accumulatedContent = '';
-
-            if (reader) {
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-
-                    const chunk = decoder.decode(value, { stream: true });
-                    const lines = chunk.split('\n');
-
-                    for (const line of lines) {
-                        if (line.startsWith('data: ')) {
-                            const data = line.slice(6);
-                            if (data === '[DONE]') continue;
-
-                            try {
-                                const parsed = JSON.parse(data);
-                                if (parsed.content) {
-                                    accumulatedContent += parsed.content;
-                                    if (currentSessionIdRef.current === sessionId) {
-                                        setStreamingContent(accumulatedContent);
-                                    }
-                                }
-                            } catch { }
-                        }
-                    }
+            for await (const event of readChatEvents(response.body)) {
+                if (event.type === 'session' && event.id !== sessionId) {
+                    adoptServerSession(sessionId, event.id, event.title);
+                    sessionId = event.id;
+                } else if (event.type === 'text') {
+                    reply += event.content;
+                    if (currentSessionIdRef.current === sessionId) setStreamingContent(reply);
+                } else if (event.type === 'error') {
+                    throw new Error('Stream interrupted');
                 }
             }
-
-            if (accumulatedContent) {
-                const finalMessages: Message[] = [...newMessages, { role: 'assistant', content: accumulatedContent }];
-                updateSessionMessages(sessionId!, finalMessages);
-            }
-        } catch (error: any) {
-            if (error.name !== 'AbortError') {
-                const errorMsg = locale === 'zh' ? '抱歉，生成回复时出现错误。' : 'Sorry, an error occurred while generating a response.';
-                const finalMessages: Message[] = [...newMessages, { role: 'assistant', content: errorMsg }];
-                updateSessionMessages(sessionId!, finalMessages);
+        } catch (error) {
+            if ((error as Error).name !== 'AbortError') {
+                failure = { role: 'assistant', content: locale === 'zh' ? '抱歉，生成回复时出现错误。' : 'Sorry, an error occurred while generating a response.' };
             }
         } finally {
+            // 停止或出错时保留已经生成的部分（服务器也存了这部分）
+            const tail: Message[] = [];
+            if (reply) tail.push({ role: 'assistant', content: reply });
+            if (failure) tail.push(failure);
+            if (tail.length > 0) appendMessages(sessionId, tail);
             setIsLoading(false);
             setStreamingContent('');
             abortControllerRef.current = null;
@@ -360,15 +416,8 @@ export default function AIChatWindow() {
     };
 
     const stopGeneration = () => {
-        if (abortControllerRef.current) {
-            abortControllerRef.current.abort();
-            setIsLoading(false);
-            if (streamingContent && currentSessionId) {
-                const currentMsgs = sessions.find(s => s.id === currentSessionId)?.messages || [];
-                updateSessionMessages(currentSessionId, [...currentMsgs, { role: 'assistant', content: streamingContent }]);
-            }
-            setStreamingContent('');
-        }
+        // 已生成的部分由 sendMessage 收尾时追加
+        abortControllerRef.current?.abort();
     };
 
     const handleHeaderPointerDown = (e: React.PointerEvent) => {
@@ -509,7 +558,8 @@ export default function AIChatWindow() {
                                         <span className={style.color}>{style.icon}</span>
                                         <span className="flex-1 text-sm text-white/80 truncate">{session.title}</span>
                                         <button onClick={(e) => { e.stopPropagation(); deleteLocalSession(session.id); }}
-                                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-white/20 rounded transition-all"
+                                            disabled={isLoading}
+                                            className="opacity-0 group-hover:opacity-100 disabled:hidden p-1 hover:bg-white/20 rounded transition-all"
                                             title={t('common.delete')}>
                                             <Trash2 size={12} className="text-white/50" />
                                         </button>
@@ -569,7 +619,11 @@ export default function AIChatWindow() {
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
                                                                     if (currentSession?.category !== categoryNum) {
-                                                                        createLocalSession(categoryNum);
+                                                                        createLocalSession(
+                                                                            categoryNum,
+                                                                            categoryNum === 1 ? currentWord || undefined : undefined,
+                                                                            categoryNum === 2 ? currentWordGroup || undefined : undefined,
+                                                                        );
                                                                     }
                                                                     setShowModeSelect(false);
                                                                 }}
@@ -667,7 +721,7 @@ export default function AIChatWindow() {
                                 </div>
                             </div>
                         )}
-                        {isLoading && !streamingContent && (
+                        {((isLoading && !streamingContent) || historyLoading) && (
                             <div className="flex justify-start"><div className="p-3 rounded-2xl bg-white/10 backdrop-blur-sm"><Loader2 className="w-5 h-5 text-white/50 animate-spin" /></div></div>
                         )}
                         <div ref={messagesEndRef} />

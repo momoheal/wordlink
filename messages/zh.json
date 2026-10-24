@@ -441,6 +441,7 @@
     "send": "发送",
     "thinking": "思考中...",
     "error": "AI 响应错误",
+    "rateLimited": "发送太频繁了，请稍等片刻再试。",
     "categories": {
       "word": "单词",
       "wordGroup": "单词组",
