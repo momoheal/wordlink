@@ -1,16 +1,9 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ensureLocalUser, getSession } from '@/lib/auth';
+import { MAX_NOTE_LENGTH, maskEmail } from '@/lib/notes';
 
 // GET /api/notes?word={word} - Get all notes for a word
-
-// 不对外暴露完整邮箱：仅返回脱敏后的显示名
-function maskEmail(email: string): string {
-    const name = email.split('@')[0] || 'user';
-    if (name.length <= 2) return name[0] + '*'.repeat(Math.max(name.length - 1, 1));
-    return name.slice(0, 2) + '***';
-}
-
 export async function GET(request: Request) {
     try {
         const session = await getSession();
@@ -87,7 +80,8 @@ export async function GET(request: Request) {
         const likeCounts = new Map<string, number>();
         const favoriteCounts = new Map<string, number>();
         for (const row of typeCounts) {
-            const n = typeof row._count === 'number' ? row._count : 0;
+            // _count 是 { _all: n } 对象；之前按 number 判断，点赞和收藏数永远是 0
+            const n = row._count._all;
             if (row.type === 'like') likeCounts.set(row.noteId, n);
             else if (row.type === 'favorite') favoriteCounts.set(row.noteId, n);
         }
@@ -157,6 +151,9 @@ export async function POST(request: Request) {
 
         if (!word || !content) {
             return NextResponse.json({ error: 'Word and content required' }, { status: 400 });
+        }
+        if (word.length > 200 || content.length > MAX_NOTE_LENGTH) {
+            return NextResponse.json({ error: 'Content too long' }, { status: 400 });
         }
 
         const note = await prisma.word_notes.create({

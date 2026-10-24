@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ensureLocalUser, getSession } from '@/lib/auth';
+import { MAX_NOTE_LENGTH } from '@/lib/notes';
 
 // PUT /api/notes/[id] - Update a note
 export async function PUT(
@@ -21,6 +22,9 @@ export async function PUT(
         const content = typeof body.content === 'string' ? body.content.trim() : '';
         if (!content) {
             return NextResponse.json({ error: 'Content required' }, { status: 400 });
+        }
+        if (content.length > MAX_NOTE_LENGTH) {
+            return NextResponse.json({ error: 'Content too long' }, { status: 400 });
         }
 
         // Check if user owns the note

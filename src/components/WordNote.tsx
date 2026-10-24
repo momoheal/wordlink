@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Heart, MessageCircle, Star, Pencil, Trash2, Send } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
+import { MAX_COMMENT_LENGTH, MAX_NOTE_LENGTH } from '@/lib/notes';
 
 interface Note {
     id: string;
@@ -186,6 +187,7 @@ export default function WordNote({ word, currentUserId, compact = false }: WordN
                     <textarea
                         value={newNoteContent}
                         onChange={(e) => setNewNoteContent(e.target.value)}
+                        maxLength={MAX_NOTE_LENGTH}
                         placeholder={t('wordDetail.notePlaceholder') || 'Write your notes or memory tricks here...'}
                         className="w-full bg-neutral-800 text-neutral-200 border border-neutral-700 rounded-lg p-3 pr-16 text-sm resize-none focus:outline-none focus:border-blue-500"
                         rows={compact ? 2 : 2}
@@ -345,6 +347,7 @@ function NoteCard({
                     <textarea
                         value={editContent}
                         onChange={(e) => setEditContent?.(e.target.value)}
+                        maxLength={MAX_NOTE_LENGTH}
                         className="w-full bg-neutral-800 text-neutral-200 border border-neutral-700 rounded-lg p-3 text-sm resize-none focus:outline-none focus:border-blue-500 mb-2"
                         rows={3}
                     />
@@ -414,6 +417,7 @@ function NoteCard({
                                 type="text"
                                 value={commentContent}
                                 onChange={(e) => setCommentContent(e.target.value)}
+                                maxLength={MAX_COMMENT_LENGTH}
                                 placeholder={locale === 'zh' ? '写下你的评论...' : 'Write a comment...'}
                                 className="flex-1 bg-neutral-800 text-neutral-200 border border-neutral-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
                                 onKeyDown={(e) => {

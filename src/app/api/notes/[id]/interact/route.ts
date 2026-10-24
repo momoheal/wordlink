@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ensureLocalUser, getSession } from '@/lib/auth';
+import { MAX_COMMENT_LENGTH, maskEmail } from '@/lib/notes';
 
 // POST /api/notes/[id]/interact - Like, favorite, or comment on a note
 export async function POST(
@@ -35,6 +36,9 @@ export async function POST(
 
         if (type === 'comment' && !content) {
             return NextResponse.json({ error: 'Comment content required' }, { status: 400 });
+        }
+        if (content.length > MAX_COMMENT_LENGTH) {
+            return NextResponse.json({ error: 'Comment too long' }, { status: 400 });
         }
 
         // For like/favorite, use upsert to toggle
@@ -72,7 +76,7 @@ export async function POST(
             }
         }
 
-        // For comments, always create new
+        // 每人每条笔记只保留一条评论：已有就改写，没有就新建
         if (type === 'comment') {
             const existingComment = await prisma.note_interactions.findUnique({
                 where: {
@@ -82,50 +86,40 @@ export async function POST(
                         type: 'comment',
                     },
                 },
-                include: {
-                    User: {
-                        select: {
-                            email: true,
-                        },
-                    },
-                },
+                select: { id: true },
             });
 
-            if (existingComment) {
-                const updated = await prisma.note_interactions.update({
+            const select = {
+                id: true,
+                noteId: true,
+                content: true,
+                createdAt: true,
+                User: { select: { email: true } },
+            } as const;
+            const comment = existingComment
+                ? await prisma.note_interactions.update({
                     where: { id: existingComment.id },
                     data: { content },
-                    include: {
-                        User: {
-                            select: { email: true },
-                        },
+                    select,
+                })
+                : await prisma.note_interactions.create({
+                    data: {
+                        id: crypto.randomUUID(),
+                        userId: session.id,
+                        noteId: id,
+                        type: 'comment',
+                        content,
                     },
+                    select,
                 });
-                return NextResponse.json({
-                    ...updated,
-                    username: updated.User.email,
-                });
-            }
 
-            const comment = await prisma.note_interactions.create({
-                data: {
-                    id: crypto.randomUUID(),
-                    userId: session.id,
-                    noteId: id,
-                    type: 'comment',
-                    content,
-                },
-                include: {
-                    User: {
-                        select: {
-                            email: true,
-                        },
-                    },
-                },
-            });
+            // 和 GET /api/notes 一样只返回脱敏的显示名，不带邮箱
             return NextResponse.json({
-                ...comment,
-                username: comment.User.email,
+                id: comment.id,
+                noteId: comment.noteId,
+                content: comment.content,
+                createdAt: comment.createdAt,
+                username: maskEmail(comment.User.email),
             });
         }
 
