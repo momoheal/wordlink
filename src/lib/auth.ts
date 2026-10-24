@@ -91,15 +91,15 @@ let demoSession: SessionUser | null = null;
 // 和 inject-demo-data.ts 一样按邮箱复用已有档案：demo 邮箱在 Supabase 注册过时，
 // 演示数据挂在那个账号的 id 上，用固定 id 会撞邮箱唯一约束、整站 401。
 async function demoAccount(): Promise<SessionUser> {
-    if (demoSession) return demoSession;
-    const existing = await prisma.user.findUnique({
-        where: { email: DEMO_ACCOUNT.email },
-        select: { id: true },
-    });
-    const session = existing ? { ...DEMO_ACCOUNT, id: existing.id } : DEMO_ACCOUNT;
-    await ensureLocalUser(session);
-    demoSession = session;
-    return session;
+    if (!demoSession) {
+        const existing = await prisma.user.findUnique({
+            where: { email: DEMO_ACCOUNT.email },
+            select: { id: true },
+        });
+        demoSession = existing ? { ...DEMO_ACCOUNT, id: existing.id } : DEMO_ACCOUNT;
+    }
+    await ensureLocalUser(demoSession);
+    return demoSession;
 }
 
 export async function getSession(): Promise<SessionUser | null> {
@@ -245,6 +245,7 @@ export function invalidateAuthCaches(userId: string) {
     for (const key of ensuredUsers.keys()) {
         if (key.startsWith(`${userId}:`)) ensuredUsers.delete(key);
     }
+    if (demoSession?.id === userId) demoSession = null;
 }
 
 export async function logout() {
