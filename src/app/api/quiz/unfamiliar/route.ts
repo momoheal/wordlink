@@ -13,7 +13,9 @@ export async function GET(request: Request) {
         await ensureLocalUser(session);
 
         const { searchParams } = new URL(request.url);
-        const count = parseInt(searchParams.get('count') || '20');
+        // 夹在 [1, 200]：负数会让 slice 从尾部砍词，过大则一次拉全部生词的释义
+        const requested = parseInt(searchParams.get('count') || '20', 10);
+        const count = Math.min(Math.max(Number.isFinite(requested) ? requested : 20, 1), 200);
 
         // Latest quiz score per word, resolved in Postgres via DISTINCT ON —
         // one row per quizzed word crosses the wire instead of full history.
@@ -31,8 +33,12 @@ export async function GET(request: Request) {
             .filter((r) => r.score < 2)
             .map((r) => r.word);
 
-        // Shuffle and slice
-        const selectedWords = unfamiliarWords.sort(() => 0.5 - Math.random()).slice(0, count);
+        // Fisher–Yates shuffle, then slice (sort with a random comparator is not uniform)
+        for (let i = unfamiliarWords.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [unfamiliarWords[i], unfamiliarWords[j]] = [unfamiliarWords[j], unfamiliarWords[i]];
+        }
+        const selectedWords = unfamiliarWords.slice(0, count);
 
         // Fetch quiz data
         const quizData = await getQuizDataForWords(selectedWords);

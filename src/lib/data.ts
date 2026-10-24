@@ -1082,26 +1082,23 @@ export async function getQuizWords(count: number): Promise<{ word: string; chine
     // count 来自客户端 query：夹在 [1, 200] 防止拖库
     const safeCount = Math.min(Math.max(Number.isFinite(count) ? Math.floor(count) : 10, 1), 200);
     try {
-        // 避免 ORDER BY RANDOM() 全表排序：用 pg_class.reltuples 估算行数后随机 OFFSET 取连续段；
-        // 段落在表尾不足 safeCount 时从表头补齐，数量语义与原 LIMIT 一致
-        const randomWords = await prisma.$queryRaw<Array<{ word: string }>>`
-            SELECT word FROM "LPT_english"."word_chinese"
-            OFFSET (
-                SELECT floor(random() * GREATEST(1, reltuples))::bigint
-                FROM pg_class
-                WHERE oid = '"LPT_english"."word_chinese"'::regclass
-            )
+        // 逐行随机抽样。随机 OFFSET 取到的是物理上连续的一段（pleasant, pleasantly, please, pleased…），
+        // 同词根的词扎堆，选择题一眼就能猜。
+        // 只从带考试标签（中高考 / 四六级 / 雅思…）的词里抽：word_chinese 里还有人名地名（hartley, gladstone）
+        // 和复数形式（villagers），不该出现在单词测验里。没导入 ECDICT 时退回整张表
+        let randomWords = await prisma.$queryRaw<Array<{ word: string }>>`
+            SELECT c.word FROM "LPT_english"."word_chinese" c
+            JOIN "LPT_english"."word_ecdict" e ON e.word = c.word
+            WHERE e.tag <> ''
+            ORDER BY random()
             LIMIT ${safeCount}
         `;
-
-        // reltuples 高估（如大量删除后未 ANALYZE）时 offset 可能越过表尾取到 0 行，
-        // 此时同样从表头补齐，避免误入文件 fallback
-        if (randomWords.length < safeCount) {
-            const topUp = await prisma.$queryRaw<Array<{ word: string }>>`
+        if (randomWords.length === 0) {
+            randomWords = await prisma.$queryRaw<Array<{ word: string }>>`
                 SELECT word FROM "LPT_english"."word_chinese"
-                LIMIT ${safeCount - randomWords.length}
+                ORDER BY random()
+                LIMIT ${safeCount}
             `;
-            randomWords.push(...topUp);
         }
         if (randomWords.length > 0) {
             const wordList = [...new Set(randomWords.map(r => r.word))];
@@ -1118,7 +1115,12 @@ export async function getQuizWords(count: number): Promise<{ word: string; chine
 
         const files = await fs.promises.readdir(CHINESE_DATA_PATH);
         const jsonFiles = files.filter(file => file.endsWith('.json') && !file.startsWith('.'));
-        const shuffled = jsonFiles.sort(() => 0.5 - Math.random()).slice(0, count);
+        // Fisher–Yates：sort(() => 0.5 - Math.random()) 的结果并不均匀
+        for (let i = jsonFiles.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [jsonFiles[i], jsonFiles[j]] = [jsonFiles[j], jsonFiles[i]];
+        }
+        const shuffled = jsonFiles.slice(0, safeCount);
 
         const results = await Promise.all(shuffled.map(async (file) => {
             const word = file.replace('.json', '');

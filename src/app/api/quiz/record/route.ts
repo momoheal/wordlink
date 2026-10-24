@@ -12,14 +12,23 @@ export async function POST(request: Request) {
 
         await ensureLocalUser(session);
 
-        const { word, testType, score } = await request.json();
-        const normalizedWord = typeof word === 'string' ? word.trim().toLowerCase() : '';
-        const normalizedTestType = Number(testType);
-        const normalizedScore = Number(score);
+        const body = await request.json().catch(() => null);
+        const normalizedWord = typeof body?.word === 'string' ? body.word.trim().toLowerCase().slice(0, 200) : '';
+        const normalizedTestType = Number(body?.testType);
+        const rawScore = Number(body?.score);
 
-        if (!normalizedWord || Number.isNaN(normalizedTestType) || Number.isNaN(normalizedScore)) {
+        if (!normalizedWord || !Number.isInteger(normalizedTestType) || !Number.isFinite(rawScore)) {
             return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
         }
+        if (normalizedTestType < 0 || normalizedTestType > 100) {
+            return NextResponse.json({ error: 'Invalid testType' }, { status: 400 });
+        }
+        // 0 = 不会，1 = 模糊 / 看了提示，2 = 掌握。超出范围的分数会让记忆模型和护照统计失真
+        const normalizedScore = Math.min(2, Math.max(0, Math.round(rawScore)));
+        const userInput = typeof body?.userInput === 'string' ? body.userInput.slice(0, 200) : null;
+        const timeSpentMs = Number.isFinite(body?.timeSpentMs)
+            ? Math.min(60 * 60 * 1000, Math.max(0, Math.floor(body.timeSpentMs)))
+            : null;
 
         // FIX: isCorrect was never written before (schema default `true` made
         // every record look correct). Derive it from the score instead.
@@ -33,6 +42,8 @@ export async function POST(request: Request) {
                 testType: normalizedTestType,
                 score: normalizedScore,
                 isCorrect,
+                userInput,
+                timeSpentMs,
             },
         });
 

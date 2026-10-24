@@ -18,6 +18,14 @@ interface UseQuizDataParams {
     count?: number;
 }
 
+/** 错误响应（401、500……）是 {error} 对象，直接当数组用会让测验页在 words.map 上崩掉 */
+async function readWordList<T>(res: Response): Promise<T[]> {
+    if (!res.ok) throw new Error(`Quiz request failed (${res.status})`);
+    const data: unknown = await res.json();
+    if (!Array.isArray(data)) throw new Error('Unexpected quiz response');
+    return data as T[];
+}
+
 export function useQuizData({ source, libraryPath, groupIndex, groupSize = 10, count = 10 }: UseQuizDataParams) {
     const t = useTranslations('quizPages.common');
     const [words, setWords] = useState<QuizWord[]>([]);
@@ -36,10 +44,10 @@ export function useQuizData({ source, libraryPath, groupIndex, groupSize = 10, c
 
             if (source === 'random') {
                 const res = await fetch(`/api/quiz/words?count=${count}`);
-                quizWords = await res.json();
+                quizWords = await readWordList<QuizWord>(res);
             } else if (source === 'unfamiliar') {
                 const res = await fetch(`/api/quiz/unfamiliar?count=${count * 2}`); // Fetch more for unfamiliar
-                quizWords = await res.json();
+                quizWords = await readWordList<QuizWord>(res);
                 if (quizWords.length === 0) {
                     setError(t('noUnfamiliar'));
                 }
@@ -56,12 +64,11 @@ export function useQuizData({ source, libraryPath, groupIndex, groupSize = 10, c
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ words: customWords })
                 });
-                quizWords = await dataRes.json();
+                quizWords = await readWordList<QuizWord>(dataRes);
             } else if (source === 'library' && libraryPath && groupIndex !== undefined && groupIndex !== null) {
                 // Fetch words from library group
                 const wordsRes = await fetch(`/api/library-words?path=${encodeURIComponent(libraryPath)}&groupIndex=${groupIndex}&groupSize=${groupSize}`);
-                if (!wordsRes.ok) throw new Error('Failed to fetch library words');
-                const wordList = await wordsRes.json();
+                const wordList = await readWordList<string>(wordsRes);
 
                 // Fetch data for these words
                 const dataRes = await fetch('/api/quiz/data', {
@@ -69,7 +76,7 @@ export function useQuizData({ source, libraryPath, groupIndex, groupSize = 10, c
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ words: wordList })
                 });
-                quizWords = await dataRes.json();
+                quizWords = await readWordList<QuizWord>(dataRes);
             }
 
             setWords(quizWords);

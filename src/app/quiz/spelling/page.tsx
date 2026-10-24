@@ -89,9 +89,9 @@ export default function SpellingQuizPage() {
       body: JSON.stringify({
         word: currentWord.word,
         testType: 1,
-        score: isCorrect ? 2 : 0,
+        // 看过提示才拼对只算「模糊」，不能和独立拼对一样记成掌握
+        score: isCorrect ? (hintLevel > 0 ? 1 : 2) : 0,
         userInput: input.trim(),
-        isCorrect,
       }),
       credentials: 'include',
     }).catch(() => {});
