@@ -208,6 +208,7 @@
     "mastered": "Mastered",
     "inProgress": "In Progress",
     "masteryTimeline": "Mastery Timeline (Last {days} Days)",
+    "masteryTimelineRange": "Mastery Timeline ({start} – {end})",
     "pageInfo": "Page {current} of {total}",
     "show": "Show",
     "perPage": "per page",

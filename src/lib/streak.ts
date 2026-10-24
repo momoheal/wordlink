@@ -16,7 +16,10 @@ export function streakWindowStart(now = new Date()): Date {
     return start;
 }
 
-/** 服务器本地日期 YYYY-MM-DD，与 SQL 的 to_char(... AT TIME ZONE SERVER_TZ, 'YYYY-MM-DD') 对应 */
+/**
+ * 当前运行环境的本地日期 YYYY-MM-DD：服务端即服务器时区，与 SQL 的
+ * to_char(... AT TIME ZONE SERVER_TZ, 'YYYY-MM-DD') 对应；在浏览器里就是用户本地日期
+ */
 export function localDateStr(d: Date): string {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');

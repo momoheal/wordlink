@@ -7,6 +7,7 @@ import { Activity, Trophy, Target, Calendar, Award } from 'lucide-react';
 import { useDeviceType } from '@/lib/hooks/useMediaQuery';
 import { useForceMobileLayout } from '@/lib/hooks';
 import { useTranslations, useLocale } from 'next-intl';
+import { localDateStr } from '@/lib/streak';
 
 const MobileLayout = dynamic(() => import('@/components/mobile/MobileLayout'), { ssr: false });
 
@@ -226,13 +227,18 @@ export default function DashboardPage() {
     const totalPages = Math.ceil(sortedStats.length / itemsPerPage);
     const paginatedStats = sortedStats.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-    // Get date range for the chart
+    // Get date range for the chart. 列和格子都按浏览器本地日期：toISOString 是 UTC 日期，
+    // 东八区 0–8 点「今天」那一列会变成昨天
     let dates: string[] = [];
-    if (startDate && endDate) {
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-            dates.push(d.toISOString().split('T')[0]);
+    const hasRange = Boolean(startDate && endDate);
+    if (hasRange) {
+        const parseDay = (value: string) => {
+            const [y, m, d] = value.split('-').map(Number);
+            return new Date(y, m - 1, d);
+        };
+        const end = parseDay(endDate);
+        for (let d = parseDay(startDate); d <= end; d.setDate(d.getDate() + 1)) {
+            dates.push(localDateStr(d));
         }
     } else {
         // Default to last 7 days on mobile, 14 on desktop
@@ -240,7 +246,7 @@ export default function DashboardPage() {
         dates = Array.from({ length: dayCount }, (_, i) => {
             const d = new Date();
             d.setDate(d.getDate() - i);
-            return d.toISOString().split('T')[0];
+            return localDateStr(d);
         }).reverse();
     }
 
@@ -517,7 +523,11 @@ export default function DashboardPage() {
                 {/* Mastery Chart */}
                 <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 sm:p-6 overflow-x-auto -mx-4 sm:mx-0 rounded-none sm:rounded-2xl border-x-0 sm:border-x">
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-2">
-                        <h2 className="text-lg sm:text-xl font-bold">{t('dashboard.masteryTimeline', { days: isMobile ? 7 : 14 })}</h2>
+                        <h2 className="text-lg sm:text-xl font-bold">
+                            {hasRange
+                                ? t('dashboard.masteryTimelineRange', { start: startDate, end: endDate })
+                                : t('dashboard.masteryTimeline', { days: dates.length })}
+                        </h2>
                         <div className="text-sm text-neutral-500">
                             {t('dashboard.pageInfo', { current: currentPage, total: totalPages || 1 })}
                         </div>
@@ -535,16 +545,20 @@ export default function DashboardPage() {
 
                         {/* Rows */}
                         <div className="space-y-1 mt-8">
-                            {paginatedStats.map(stat => (
+                            {paginatedStats.map(stat => {
+                                // history 按时间升序：同一天后面的记录覆盖前面的，格子显示当天最后的掌握度
+                                const scoreByDay = new Map<string, number>();
+                                for (const h of stat.history) scoreByDay.set(localDateStr(new Date(h.date)), h.score);
+                                return (
                                 <div key={stat.word} className="flex items-center h-8 hover:bg-neutral-800/50 rounded transition-colors">
                                     <div className={`${isMobile ? 'w-20 text-xs' : 'w-32 text-sm'} font-medium text-neutral-300 truncate pr-2 text-right`}>
                                         {stat.word}
                                     </div>
                                     <div className="flex gap-1 h-full items-center">
                                         {dates.map(date => {
-                                            // Find score for this date
-                                            const activity = stat.history.find(h => h.date.startsWith(date));
-                                            const score = activity ? activity.score : 0;
+                                            const dayScore = scoreByDay.get(date);
+                                            const activity = dayScore !== undefined;
+                                            const score = dayScore ?? 0;
 
                                             // Determine color based on score
                                             let color = 'bg-neutral-800';
@@ -563,7 +577,8 @@ export default function DashboardPage() {
                                         })}
                                     </div>
                                 </div>
-                            ))}
+                                );
+                            })}
                         </div>
 
                         {/* Pagination & Display Controls */}

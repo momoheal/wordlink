@@ -199,6 +199,7 @@
     "mastered": "已掌握",
     "inProgress": "学习中",
     "masteryTimeline": "掌握时间线（最近 {days} 天）",
+    "masteryTimelineRange": "掌握时间线（{start} 至 {end}）",
     "pageInfo": "第 {current} 页，共 {total} 页",
     "show": "显示",
     "perPage": "每页",
