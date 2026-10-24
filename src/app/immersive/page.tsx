@@ -140,18 +140,8 @@ export default function ImmersivePage() {
         setHistory(newHistory);
         setCurrentIndex(newHistory.length - 1);
 
-        // Ensure detail window is open
+        // Ensure detail window is open (the visit itself is recorded by WordDetail's telemetry)
         if (!showDetail) setShowDetail(true);
-
-        // Always attempt to record visit - server will handle auth
-        fetch('/api/user/visit', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ word: word.toLowerCase() }),
-            credentials: 'include'
-        }).catch(() => {
-            // Silent failure - user might not be logged in or network issue
-        });
     };
 
     const goBack = () => {
@@ -240,6 +230,7 @@ export default function ImmersivePage() {
                     <WordDetail
                         word={currentWord}
                         onWordClick={handleWordSelect}
+                        visitSource="immersive"
                         transparent={true}
                         onPrevWord={goBack}
                         onNextWord={goForward}

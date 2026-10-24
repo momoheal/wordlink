@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, PanelLeftOpen, Sparkles, Star } from 'lucide
 import { useTranslations } from 'next-intl';
 import type { ChineseData } from '@/lib/data';
 import { cacheGet, cacheSet } from '@/lib/client-cache';
-import { telemetry } from '@/lib/telemetry';
+import { telemetry, type TelemetrySource } from '@/lib/telemetry';
 import { wikiLinksToMarkdown } from '@/lib/wiki-links';
 import { useSettings } from '@/context/SettingsContext';
 import { useAI } from './ai/AIProvider';
@@ -23,6 +23,8 @@ interface WordDetailProps {
   onToggleSidebar?: () => void;
   transparent?: boolean;
   currentUserId?: string;
+  /** Source tag stored with the word visit */
+  visitSource?: TelemetrySource;
 }
 
 interface WordDetailEnvelope {
@@ -59,6 +61,7 @@ export default function WordDetail({
   onToggleSidebar,
   transparent,
   currentUserId,
+  visitSource = 'studio',
 }: WordDetailProps) {
   const { shortcuts, showHoverTooltip, showWordDetailTooltip, aiEnabled, preferredAccent, youtubeMode } = useSettings();
   const { openWithWord } = useAI();
@@ -144,9 +147,9 @@ export default function WordDetail({
 
   useEffect(() => {
     if (!word?.trim()) return;
-    telemetry.trackEnter(word, 'studio');
+    telemetry.trackEnter(word, visitSource);
     return () => telemetry.flush();
-  }, [word]);
+  }, [word, visitSource]);
 
   useEffect(() => {
     const currentRequest = ++requestIdRef.current;
