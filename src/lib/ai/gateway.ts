@@ -84,6 +84,16 @@ interface DeepseekOptions {
     model?: string;
     temperature?: number;
     maxTokens?: number;
+    /** Aborts the upstream request, e.g. when the browser goes away mid-stream. */
+    signal?: AbortSignal;
+}
+
+/** The provider answered with an error status: 402 = balance exhausted, 429 = rate limited, ... */
+export class LlmError extends Error {
+    constructor(readonly status: number, detail: string) {
+        super(`LLM API error: ${status} ${detail.slice(0, 300)}`);
+        this.name = 'LlmError';
+    }
 }
 
 function apiKey(): string {
@@ -93,107 +103,94 @@ function apiKey(): string {
     return key;
 }
 
+/**
+ * POST /chat/completions. `timeoutMs` bounds the wait for the response headers only,
+ * so a long streamed answer is not cut off halfway.
+ */
+async function postCompletion(
+    messages: ChatMessage[],
+    opts: DeepseekOptions,
+    stream: boolean,
+    timeoutMs: number,
+): Promise<Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new Error(`LLM request timed out after ${timeoutMs} ms`)), timeoutMs);
+    const signal = opts.signal ? AbortSignal.any([opts.signal, controller.signal]) : controller.signal;
+    try {
+        const res = await fetch(`${LLM_BASE_URL}/chat/completions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${apiKey()}`,
+            },
+            body: JSON.stringify({
+                model: opts.model || LLM_MODEL,
+                messages,
+                temperature: opts.temperature ?? 1.0,
+                max_tokens: opts.maxTokens ?? 2048,
+                stream,
+            }),
+            signal,
+        });
+        if (!res.ok || !res.body) {
+            const errText = await res.text().catch(() => '');
+            throw new LlmError(res.status, errText);
+        }
+        return res;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 /** Non-streaming completion -> full text. */
 export async function completeDeepseek(messages: ChatMessage[], opts: DeepseekOptions = {}): Promise<string> {
-    const res = await fetch(`${LLM_BASE_URL}/chat/completions`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${apiKey()}`,
-        },
-        body: JSON.stringify({
-            model: opts.model || LLM_MODEL,
-            messages,
-            temperature: opts.temperature ?? 1.0,
-            max_tokens: opts.maxTokens ?? 2048,
-            stream: false,
-        }),
-    });
-    if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`LLM API error: ${res.status} ${errText.slice(0, 300)}`);
-    }
+    const res = await postCompletion(messages, opts, false, 90_000);
     const json = await res.json();
     return json.choices?.[0]?.message?.content || '';
 }
 
 /**
- * Streaming completion as an SSE event-source of `{type:'text', content}` frames.
- * Returns the raw Response ready to be returned from a route handler.
+ * Streaming completion. Resolves once the provider has accepted the request (throws
+ * `LlmError` otherwise), so callers can still answer with a proper status code; the
+ * returned generator then yields the text deltas. Stopping the iteration early
+ * (`break`, `return()`) closes the upstream connection.
  */
-export async function streamDeepseekSse(messages: ChatMessage[], opts: DeepseekOptions = {}): Promise<Response> {
-    const deepseekRes = await fetch(`${LLM_BASE_URL}/chat/completions`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${apiKey()}`,
-        },
-        body: JSON.stringify({
-            model: opts.model || LLM_MODEL,
-            messages,
-            temperature: opts.temperature ?? 1.0,
-            max_tokens: opts.maxTokens ?? 2048,
-            stream: true,
-        }),
-    });
-    if (!deepseekRes.ok || !deepseekRes.body) {
-        const errText = await deepseekRes.text().catch(() => '');
-        throw new Error(`LLM API error: ${deepseekRes.status} ${errText.slice(0, 300)}`);
-    }
-
-    const encoder = new TextEncoder();
-    const responseStream = new TransformStream();
-    const writer = responseStream.writable.getWriter();
-
-    (async () => {
-        const reader = deepseekRes.body!.getReader();
-        const decoder = new TextDecoder();
-        try {
-            let buffer = '';
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
-                buffer = lines.pop() || '';
-                for (const line of lines) {
-                    if (!line.startsWith('data: ')) continue;
-                    const data = line.slice(6).trim();
-                    if (data === '[DONE]') continue;
-                    try {
-                        const parsed = JSON.parse(data);
-                        const content = parsed.choices?.[0]?.delta?.content || '';
-                        if (content) {
-                            await writer.write(
-                                encoder.encode(`data: ${JSON.stringify({ type: 'text', content })}\n\n`)
-                            );
-                        }
-                    } catch {
-                        /* partial json line - ignore */
-                    }
-                }
-            }
-        } catch (e) {
-            console.error('[ai-gateway] stream error:', e);
-            await writer.write(
-                encoder.encode(`data: ${JSON.stringify({ type: 'error', message: 'stream interrupted' })}\n\n`)
-            );
-        } finally {
-            await writer.write(encoder.encode('data: [DONE]\n\n'));
-            await writer.close();
-        }
-    })();
-
-    return new Response(responseStream.readable, {
-        headers: {
-            'Content-Type': 'text/event-stream; charset=utf-8',
-            'Cache-Control': 'no-cache',
-            Connection: 'keep-alive',
-        },
-    });
+export async function streamDeepseek(messages: ChatMessage[], opts: DeepseekOptions = {}): Promise<AsyncGenerator<string>> {
+    const res = await postCompletion(messages, opts, true, 30_000);
+    return readDeltas(res.body!);
 }
 
-/** Encode one SSE frame (used by agents before handing off to the gateway stream). */
-export function sseFrame(payload: Record<string, unknown>): string {
-    return `data: ${JSON.stringify(payload)}\n\n`;
+async function* readDeltas(body: ReadableStream<Uint8Array>): AsyncGenerator<string> {
+    const reader = body.getReader();
+    const decoder = new TextDecoder();
+    // SSE events can be split across network chunks: only parse complete lines.
+    let buffer = '';
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() ?? '';
+            for (const line of lines) {
+                const delta = deltaOf(line);
+                if (delta) yield delta;
+            }
+        }
+        const delta = deltaOf(buffer + decoder.decode());
+        if (delta) yield delta;
+    } finally {
+        await reader.cancel().catch(() => {});
+    }
+}
+
+function deltaOf(line: string): string {
+    if (!line.startsWith('data:')) return '';
+    const data = line.slice(5).trim();
+    if (!data || data === '[DONE]') return '';
+    try {
+        return JSON.parse(data).choices?.[0]?.delta?.content || '';
+    } catch {
+        return '';
+    }
 }
