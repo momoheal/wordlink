@@ -14,7 +14,6 @@ const HIDDEN_PREFIXES = [
   '/login',
   '/reset-password',
   '/auth',
-  '/admin',
   '/quiz',
   '/word',
   '/graph',

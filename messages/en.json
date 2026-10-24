@@ -702,17 +702,6 @@
     "quotaAmbient": "You've used {used}/{limit} free AI stories today. Upgrade to Pro for unlimited generation.",
     "upgrade": "Upgrade to Pro"
   },
-  "admin": {
-    "loading": "Loading...",
-    "title": "Admin Access",
-    "username": "Username",
-    "password": "Password",
-    "login": "Login",
-    "loginFailed": "Login failed",
-    "errorOccurred": "An error occurred",
-    "dashboardTitle": "Admin Dashboard",
-    "welcome": "Welcome, Administrator."
-  },
   "libraryEdit": {
     "loading": "Loading...",
     "title": "Edit Library",

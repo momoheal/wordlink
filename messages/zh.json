@@ -693,17 +693,6 @@
     "quotaAmbient": "今日免费 AI 生成已用 {used}/{limit} 次，升级 Pro 后无限生成。",
     "upgrade": "升级 Pro"
   },
-  "admin": {
-    "loading": "加载中...",
-    "title": "管理员入口",
-    "username": "用户名",
-    "password": "密码",
-    "login": "登录",
-    "loginFailed": "登录失败",
-    "errorOccurred": "发生错误，请重试",
-    "dashboardTitle": "管理面板",
-    "welcome": "欢迎，管理员。"
-  },
   "libraryEdit": {
     "loading": "加载中...",
     "title": "编辑词库",

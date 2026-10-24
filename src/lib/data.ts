@@ -78,12 +78,6 @@ export interface EnrichedWord {
     chineseData?: ChineseData | null;
 }
 
-export interface GroupInfo {
-    index: number;
-    name: string;
-    wordCount: number;
-}
-
 // Fallback in-memory cache for legacy files
 // once()：并发去重——大文件只读/解析一次（并发调用共享同一 Promise），
 // 失败时解锁使下次调用可重试（与原 cache-miss 重试语义一致）
@@ -1135,38 +1129,6 @@ export async function getQuizWords(count: number): Promise<{ word: string; chine
     }
 }
 
-export async function getUserLibraryWords(
-    libraryId: string,
-    userId: string,
-    groupIndex?: number,
-    groupSize?: number
-): Promise<string[]> {
-    try {
-        const library = await prisma.userLibrary.findUnique({
-            where: { id: libraryId },
-        });
-
-        if (!library || library.userId !== userId) {
-            return [];
-        }
-
-        const query = {
-            where: { libraryId },
-            orderBy: { sequence: 'asc' as const },
-            select: { word: true },
-            ...(groupIndex !== undefined && groupSize !== undefined && groupIndex >= 0
-                ? { skip: groupIndex * groupSize, take: groupSize }
-                : {}),
-        };
-
-        const words = await prisma.userLibraryWord.findMany(query);
-        return words.map((w) => w.word);
-    } catch (error) {
-        console.error('Error getting user library words:', error);
-        return [];
-    }
-}
-
 export async function getUserLibraryWordsEnriched(
     libraryId: string,
     userId: string,
@@ -1272,41 +1234,6 @@ export async function getUserLibraryWordsEnriched(
         });
     } catch (error) {
         console.error('Error getting enriched user library words:', error);
-        return [];
-    }
-}
-
-export async function getUserLibraryGroups(
-    libraryId: string,
-    userId: string,
-    groupSize: number = 100
-): Promise<GroupInfo[]> {
-    try {
-        const library = await prisma.userLibrary.findUnique({
-            where: { id: libraryId },
-        });
-
-        if (!library || library.userId !== userId) {
-            return [];
-        }
-
-        const safeGroupSize = Number.isFinite(groupSize) && groupSize > 0
-            ? Math.floor(groupSize)
-            : 100;
-        const totalWords = library.wordCount;
-        const totalGroups = Math.ceil(totalWords / safeGroupSize);
-
-        return Array.from({ length: totalGroups }, (_, index) => {
-            const startIndex = index * safeGroupSize;
-            const endIndex = Math.min(startIndex + safeGroupSize, totalWords);
-            return {
-                index,
-                name: `Group ${index + 1} (${startIndex + 1}-${endIndex})`,
-                wordCount: endIndex - startIndex,
-            };
-        });
-    } catch (error) {
-        console.error('Error getting user library groups:', error);
         return [];
     }
 }
