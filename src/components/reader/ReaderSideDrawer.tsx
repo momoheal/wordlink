@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { BookmarkPlus, Check, Compass, GripVertical, Layers, Loader2, MessageSquare, Sparkles, X } from 'lucide-react';
 import PanelFissionGraph from '@/components/PanelFissionGraph';
+import { readChatEvents } from '@/lib/ai/chat-events';
 
 interface WordDetails {
     word: string;
@@ -27,6 +28,7 @@ export default function ReaderSideDrawer({
 }) {
     const t = useTranslations('reader.drawer');
     const tp = useTranslations('paywall');
+    const tai = useTranslations('ai');
     const [word, setWord] = useState<string | undefined>(initialWord);
     // Words left behind in the graph since the drawer opened on `initialWord`, for going back.
     const [trail, setTrail] = useState<{ start?: string; words: string[] }>({ start: initialWord, words: [] });
@@ -153,29 +155,52 @@ export default function ReaderSideDrawer({
         }
     };
 
-    // DeepSeek 助教问答
+    // 关掉抽屉时停止还在生成的回答
+    const askAbortRef = useRef<AbortController | null>(null);
+    useEffect(() => () => askAbortRef.current?.abort(), []);
+
+    // DeepSeek 助教问答：回答是流式的，边生成边显示
     const handleAskAi = async () => {
         if (!question.trim() || asking) return;
         setAsking(true);
         setAiReply('');
+        const controller = new AbortController();
+        askAbortRef.current = controller;
+        let reply = '';
         try {
             const res = await fetch('/api/ai/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     newMessage: t('aiPrompt', { sentence: sentenceText || '', question }),
-                    messages: [],
                 }),
+                signal: controller.signal,
             });
             if (res.status === 402) {
                 const data = await res.json().catch(() => null);
                 setAiReply(tp('quotaBodyPlain', { limit: data?.limit ?? '–' }));
-            } else if (res.ok) {
-                const data = await res.json();
-                setAiReply(data.reply || data.content || t('aiAck'));
+                return;
             }
+            if (res.status === 429) {
+                setAiReply(tai('rateLimited'));
+                return;
+            }
+            if (!res.ok || !res.body) throw new Error(`Chat request failed (${res.status})`);
+
+            for await (const event of readChatEvents(res.body)) {
+                if (event.type === 'text') {
+                    reply += event.content;
+                    setAiReply(reply);
+                } else if (event.type === 'error') {
+                    throw new Error('Stream interrupted');
+                }
+            }
+            if (!reply) setAiReply(t('aiError'));
         } catch {
-            setAiReply(t('aiError'));
+            if (!controller.signal.aborted) {
+                // 中途出错时保留已经生成的部分
+                setAiReply(reply ? `${reply}\n\n${t('aiError')}` : t('aiError'));
+            }
         } finally {
             setAsking(false);
         }

@@ -78,7 +78,6 @@
       "aiPlaceholder": "问问 AI 助教关于这句话的语法、词汇用法或文化背景...",
       "asking": "思考中…",
       "ask": "提问",
-      "aiAck": "AI 助教已收到",
       "aiError": "解答失败，请稍后再试",
       "aiPrompt": "在以下英语语境中：\n\"{sentence}\"\n\n请解答：{question}",
       "definitions": "释义"

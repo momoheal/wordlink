@@ -78,7 +78,6 @@
       "aiPlaceholder": "Ask the AI tutor about this sentence's grammar, vocabulary, or cultural background...",
       "asking": "Thinking…",
       "ask": "Ask",
-      "aiAck": "AI tutor received your question",
       "aiError": "Failed to answer. Please try again later.",
       "aiPrompt": "In the following English context:\n\"{sentence}\"\n\nPlease answer in English: {question}",
       "definitions": "Definitions"
