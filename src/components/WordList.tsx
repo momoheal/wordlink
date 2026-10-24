@@ -87,26 +87,32 @@ export default function WordList({ onWordSelect, selectedWord, isSidebarCollapse
 
     // Fetch library items when currentPath changes
     useEffect(() => {
+        // 快速切换目录时，慢回来的旧请求不能覆盖新目录的内容
+        const controller = new AbortController();
         const fetchLibraryItems = async () => {
             if (viewMode !== 'libraries') return;
 
             try {
-                const res = await fetch(`/api/libraries?path=${encodeURIComponent(currentPath)}`);
+                const res = await fetch(`/api/libraries?path=${encodeURIComponent(currentPath)}`, { signal: controller.signal });
                 if (res.ok) {
                     const data = await res.json();
+                    if (controller.signal.aborted) return;
                     setLibraryItems(data);
                 }
             } catch (error) {
+                if (controller.signal.aborted) return;
                 console.error('Failed to fetch library items', error);
             } finally {
-                setLibrariesLoaded(true);
+                if (!controller.signal.aborted) setLibrariesLoaded(true);
             }
         };
         fetchLibraryItems();
+        return () => controller.abort();
     }, [currentPath, viewMode]);
 
     // Fetch groups when a library is selected
     useEffect(() => {
+        const controller = new AbortController();
         const fetchGroups = async () => {
             if (viewMode === 'words' && currentPath && !searchQuery) {
                 try {
@@ -119,9 +125,10 @@ export default function WordList({ onWordSelect, selectedWord, isSidebarCollapse
                         url = `/api/library-groups?path=${encodeURIComponent(currentPath)}&groupSize=${groupSize}`;
                     }
 
-                    const res = await fetch(url);
+                    const res = await fetch(url, { signal: controller.signal });
                     if (res.ok) {
                         const data = await res.json();
+                        if (controller.signal.aborted) return;
                         // Handle different response formats
                         if (data.groups) {
                             // User library format - convert to system format
@@ -138,6 +145,7 @@ export default function WordList({ onWordSelect, selectedWord, isSidebarCollapse
                         // The initial value was already set during useState initialization
                     }
                 } catch (error) {
+                    if (controller.signal.aborted) return;
                     console.error('Failed to fetch groups', error);
                 }
             } else {
@@ -145,10 +153,14 @@ export default function WordList({ onWordSelect, selectedWord, isSidebarCollapse
             }
         };
         fetchGroups();
+        return () => controller.abort();
     }, [currentPath, viewMode, searchQuery, groupSize]);
 
     // Fetch words based on search or selected library
     useEffect(() => {
+        // 防抖只挡住还没发出的请求；已经发出的旧请求（上一个搜索词、上一个分组）要中止，
+        // 否则它晚回来会把新结果覆盖掉
+        const controller = new AbortController();
         const fetchWords = async () => {
             setLoading(true);
             try {
@@ -174,9 +186,10 @@ export default function WordList({ onWordSelect, selectedWord, isSidebarCollapse
                     }
                 }
 
-                const res = await fetch(url);
+                const res = await fetch(url, { signal: controller.signal });
                 if (res.ok) {
                     const data = await res.json();
+                    if (controller.signal.aborted) return;
                     // Handle different response formats
                     if (data.words) {
                         // User library response format
@@ -197,9 +210,10 @@ export default function WordList({ onWordSelect, selectedWord, isSidebarCollapse
                     }
                 }
             } catch (error) {
+                if (controller.signal.aborted) return;
                 console.error('Failed to fetch words', error);
             } finally {
-                setLoading(false);
+                if (!controller.signal.aborted) setLoading(false);
             }
         };
 
@@ -208,7 +222,10 @@ export default function WordList({ onWordSelect, selectedWord, isSidebarCollapse
             fetchWords();
         }, 300);
 
-        return () => clearTimeout(timeoutId);
+        return () => {
+            clearTimeout(timeoutId);
+            controller.abort();
+        };
     }, [searchQuery, currentPath, viewMode, selectedGroupIndex, groupSize, showChinese]);
 
     // Save WordList state to localStorage when key states change
@@ -226,7 +243,6 @@ export default function WordList({ onWordSelect, selectedWord, isSidebarCollapse
                     scrollPosition: scrollTop,
                 };
                 localStorage.setItem('wordListState', JSON.stringify(stateToSave));
-                console.log('WordList state saved:', stateToSave);
             } catch (error) {
                 console.error('Failed to save WordList state:', error);
             }
@@ -251,7 +267,6 @@ export default function WordList({ onWordSelect, selectedWord, isSidebarCollapse
                             const parsed = JSON.parse(currentState);
                             parsed.scrollPosition = scrollTop;
                             localStorage.setItem('wordListState', JSON.stringify(parsed));
-                            console.log('Scroll position saved:', scrollTop);
                         }
                     } catch (error) {
                         console.error('Failed to save scroll position:', error);
@@ -273,7 +288,6 @@ export default function WordList({ onWordSelect, selectedWord, isSidebarCollapse
             // Use longer timeout to ensure virtualizer is fully initialized
             const timer = setTimeout(() => {
                 if (parentRef.current && !scrollRestored) {
-                    console.log('Attempting to restore scroll position:', savedScrollPosition);
                     parentRef.current.scrollTop = savedScrollPosition;
                     // Trigger scroll event to update virtualizer
                     parentRef.current.dispatchEvent(new Event('scroll', { bubbles: true }));

@@ -118,6 +118,8 @@ export default function MobileWordList() {
       } catch { /* ignore */ }
     }
 
+    // 已经发出的旧请求（上一个搜索词、上一个分组）要中止，否则晚回来会覆盖新结果
+    const controller = new AbortController();
     const fetchWords = async () => {
       setLoading(true);
       try {
@@ -135,9 +137,10 @@ export default function MobileWordList() {
             url = `/api/library-words?path=${encodeURIComponent(currentPath)}&groupIndex=${selectedGroupIndex}&groupSize=${groupSize}&includeDefinitions=${showChinese}&slim=1`;
           }
         }
-        const res = await fetch(url);
+        const res = await fetch(url, { signal: controller.signal });
         if (res.ok) {
           const data = await res.json();
+          if (controller.signal.aborted) return;
           let parsedWords: (string | WordWithData)[];
           if (data.words) {
             if (showChinese && data.words.length > 0 && data.words[0].chineseData) {
@@ -156,11 +159,14 @@ export default function MobileWordList() {
           }
         }
       } catch { /* ignore */ } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
     const t = setTimeout(fetchWords, 300);
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      controller.abort();
+    };
   }, [searchQuery, currentPath, viewMode, selectedGroupIndex, groupSize, showChinese]);
 
   // Preload first 20 words into localStorage cache for instant page opens
