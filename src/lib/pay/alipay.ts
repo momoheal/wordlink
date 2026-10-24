@@ -67,9 +67,11 @@ function buildSignContent(params: AlipayParams): string {
         .join('&');
 }
 
+// 支付宝要求北京时间（GMT+8）。服务器不一定在东八区，按 UTC+8 换算（中国没有夏令时）
 function timestamp(d = new Date()): string {
+    const bj = new Date(d.getTime() + 8 * 60 * 60 * 1000);
     const p = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+    return `${bj.getUTCFullYear()}-${p(bj.getUTCMonth() + 1)}-${p(bj.getUTCDate())} ${p(bj.getUTCHours())}:${p(bj.getUTCMinutes())}:${p(bj.getUTCSeconds())}`;
 }
 
 function publicParams(method: string, bizContent: Record<string, unknown>): AlipayParams {
@@ -154,6 +156,8 @@ export async function queryOrder(outTradeNo: string): Promise<AlipayQueryResult 
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: new URLSearchParams(params).toString(),
+            // 订单状态接口在请求里同步查单，网关卡住时不能把用户的轮询一起挂住
+            signal: AbortSignal.timeout(10_000),
         });
         const json = await res.json();
         const r = json?.alipay_trade_query_response;

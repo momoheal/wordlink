@@ -240,11 +240,17 @@ export async function ensureLocalUser(session: SessionUser) {
     ensuredUsers.set(ensuredKey, true);
 }
 
-/** Drop cached session/profile bookkeeping for a user (e.g. after deletion). */
+/** Drop cached session/profile bookkeeping for a user (after deletion, or a plan change such as a paid upgrade). */
 export function invalidateAuthCaches(userId: string) {
     for (const key of ensuredUsers.keys()) {
         if (key.startsWith(`${userId}:`)) ensuredUsers.delete(key);
     }
+    // 会话按 token 缓存 30 秒且带着 plan：付款升级后不清掉，这段时间里仍按免费版限额
+    const staleSessions: string[] = [];
+    for (const [key, value] of sessionCache.entries()) {
+        if (value.user?.id === userId) staleSessions.push(key);
+    }
+    for (const key of staleSessions) sessionCache.delete(key);
     if (demoSession?.id === userId) demoSession = null;
 }
 

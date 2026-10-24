@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { invalidateAuthCaches } from '@/lib/auth';
 import { getProduct } from './products';
 
 export type FulfillResult = 'paid' | 'already_paid' | 'amount_mismatch' | 'unknown_product' | 'not_found';
@@ -50,5 +51,7 @@ export async function fulfillPaidOrder(input: {
         });
     });
 
-    return claimed ? 'paid' : 'already_paid';
+    if (!claimed) return 'already_paid';
+    invalidateAuthCaches(order.userId);
+    return 'paid';
 }
