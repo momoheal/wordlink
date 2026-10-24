@@ -131,7 +131,8 @@ export async function GET() {
         let normalizedLocal = await cache.get<any[]>(scoredCacheKey);
 
         if (!normalizedLocal) {
-            const localArticles = await listAmbientArticles();
+            // 共享文章 + 自己生成的 AI 故事；匿名用户只有共享文章，所以按 dueWords 共用缓存也不会串
+            const localArticles = await listAmbientArticles(session?.id ?? null);
 
             const userProfile: UserLearningProfile = {
                 userCefr: 'B1',

@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
+import { getSession } from '@/lib/auth';
 import { CURATED_ARTICLES } from '@/lib/ambient-articles-seed';
 import { listAmbientArticles } from '@/lib/ambient-library';
 
 export const dynamic = 'force-dynamic';
+
+// 列表里有各人自己的 AI 故事，不能让 CDN 按 URL 存一份发给所有人
+const NO_SHARED_CACHE = { 'Cache-Control': 'private, no-store' };
 
 /** 统计英文词数 */
 function countWords(paragraphs: Array<{ en: string }>): number {
@@ -10,12 +14,13 @@ function countWords(paragraphs: Array<{ en: string }>): number {
 }
 
 /**
- * GET /api/ambient/articles —— 沉浸式阅读文章列表。
+ * GET /api/ambient/articles —— 沉浸式阅读文章列表：共享的精选文章 + 自己生成的 AI 故事。
  * 首次访问时自动播种 4 篇精选短文（零外部依赖，演示自愈）。
  */
 export async function GET() {
     try {
-        const articles = await listAmbientArticles();
+        const session = await getSession();
+        const articles = await listAmbientArticles(session?.id ?? null);
 
         return NextResponse.json(
             articles.map((a) => ({
@@ -29,7 +34,7 @@ export async function GET() {
                 wordCount: a.wordCount,
                 createdAt: a.createdAt,
             })),
-            { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' } },
+            { headers: NO_SHARED_CACHE },
         );
     } catch (error) {
         console.error('Failed to list ambient articles:', error);
@@ -45,7 +50,7 @@ export async function GET() {
                 paragraphs: a.paragraphs,
                 wordCount: countWords(a.paragraphs),
             })),
-            { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' } },
+            { headers: NO_SHARED_CACHE },
         );
     }
 }

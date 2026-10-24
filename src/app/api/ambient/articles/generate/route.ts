@@ -129,6 +129,7 @@ Respond with ONLY valid JSON in exactly this shape (no markdown fences, no comme
                 level,
                 season: season ?? null,
                 source: 'ai',
+                userId: session.id, // 只出现在生成者自己的列表里
                 paragraphs,
                 wordCount,
             },

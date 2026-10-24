@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getSession } from '@/lib/auth';
 import { CURATED_ARTICLES } from '@/lib/ambient-articles-seed';
+import { canViewAmbientArticle } from '@/lib/ambient-library';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,6 +58,12 @@ export async function GET(
         });
 
         if (article) {
+            // AI 故事只给生成者看：别人拿着 id 直接打开，和文章不存在一样
+            const viewerId = article.userId ? (await getSession())?.id ?? null : null;
+            if (!canViewAmbientArticle(article, viewerId)) {
+                return NextResponse.json({ error: 'Not found' }, { status: 404 });
+            }
+
             const rawPara = Array.isArray(article.paragraphs) ? (article.paragraphs as Array<Record<string, unknown>>) : [];
             const paragraphs = rawPara.map((p, pIdx) => ({
                 paragraphIndex: pIdx,
@@ -74,7 +82,7 @@ export async function GET(
                 paragraphs,
                 wordCount: article.wordCount,
                 createdAt: article.createdAt,
-            });
+            }, article.userId ? { headers: { 'Cache-Control': 'private, no-store' } } : undefined);
         }
     } catch (err) {
         console.error('Error fetching local article:', err);

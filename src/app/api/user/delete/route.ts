@@ -33,6 +33,7 @@ export async function POST(request: Request) {
             await tx.userWordState.deleteMany({ where: { userId: session.id } });
             await tx.studyPlan.deleteMany({ where: { userId: session.id } });
             await tx.userLibrary.deleteMany({ where: { userId: session.id } });
+            await tx.ambientArticle.deleteMany({ where: { userId: session.id } });
             await tx.user.delete({ where: { id: session.id } });
         });
 

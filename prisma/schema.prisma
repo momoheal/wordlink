@@ -52,6 +52,7 @@ model User {
   lastActiveAt      DateTime?
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @default(now())
+  AmbientArticle    AmbientArticle[]
   CheckinLog        CheckinLog[]
   PaymentOrder      PaymentOrder[]
   QuizRecord        QuizRecord[]
@@ -326,11 +327,14 @@ model AmbientArticle {
   level     String   @default("B1") // A2 / B1 / B2 / C1
   season    String? // 绑定季节场景: spring / summer / autumn / winter
   source    String   @default("ai") // ai = DeepSeek 生成, curated = 精选人工, import = EchoStream 同步
+  userId    String? // AI 故事的生成者，只有他自己看得到；精选 / 导入文章为空，全站共享
   paragraphs Json // [{ en, zh?, audioUrl? }]
   wordCount Int      @default(0)
   createdAt DateTime @default(now())
+  User      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([level])
+  @@index([userId])
   @@schema("LPT_english")
 }
 
