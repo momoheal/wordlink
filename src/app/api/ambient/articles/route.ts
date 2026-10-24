@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
 import { CURATED_ARTICLES } from '@/lib/ambient-articles-seed';
+import { listAmbientArticles } from '@/lib/ambient-library';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,27 +15,7 @@ function countWords(paragraphs: Array<{ en: string }>): number {
  */
 export async function GET() {
     try {
-        let articles = await prisma.ambientArticle.findMany({
-            orderBy: { createdAt: 'desc' },
-        });
-
-        // 自愈播种：库空则写入精选内容
-        if (articles.length === 0) {
-            await prisma.ambientArticle.createMany({
-                data: CURATED_ARTICLES.map((a) => ({
-                    title: a.title,
-                    titleZh: a.titleZh,
-                    level: a.level,
-                    season: a.season,
-                    source: 'curated',
-                    paragraphs: JSON.parse(JSON.stringify(a.paragraphs)),
-                    wordCount: countWords(a.paragraphs),
-                })),
-            });
-            articles = await prisma.ambientArticle.findMany({
-                orderBy: { createdAt: 'desc' },
-            });
-        }
+        const articles = await listAmbientArticles();
 
         return NextResponse.json(
             articles.map((a) => ({

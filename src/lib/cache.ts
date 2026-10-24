@@ -3,13 +3,13 @@ import { LRUCache } from 'lru-cache';
 /**
  * In-memory LRU cache for frequently accessed data
  * - Max 10,000 items
- * - 15 minute TTL
- * - Updates age on get (keeps frequently accessed items fresh)
+ * - 15 minute TTL by default, counted from the write: reads do not extend it,
+ *   otherwise a short-lived entry that keeps being read would never refresh
  */
 const memoryCache = new LRUCache<string, any>({
   max: 10000,
   ttl: 1000 * 60 * 15, // 15 minutes
-  updateAgeOnGet: true,
+  updateAgeOnGet: false,
   updateAgeOnHas: false,
 });
 
@@ -22,6 +22,7 @@ export const CACHE_KEYS = {
   wordEnriched: (word: string) => `word:enriched:${word}`,
   fissionGraph: (word: string) => `graph:${word}`,
   allWords: () => 'words:all',
+  scoredArticles: (userId: string) => `articles:scored:${userId}`,
 };
 
 /**

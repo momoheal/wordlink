@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { createHash } from 'node:crypto';
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth';
-import { cache } from '@/lib/cache';
+import { cache, CACHE_KEYS } from '@/lib/cache';
 import { CURATED_ARTICLES } from '@/lib/ambient-articles-seed';
+import { listAmbientArticles } from '@/lib/ambient-library';
 import { scoreArticleWithRmeV5, type ArticleCandidate, type UserLearningProfile } from '@/lib/reader-engine/recommender';
 
 export const dynamic = 'force-dynamic';
@@ -124,33 +125,13 @@ export async function GET() {
 
         // 评分结果 60s LRU：登录用户按 userId，匿名用户按 dueWords 哈希
         const scoredCacheKey = session
-            ? `articles:scored:${session.id}`
+            ? CACHE_KEYS.scoredArticles(session.id)
             : `articles:scored:anon:${createHash('sha1').update(dueWords.join(',')).digest('hex').slice(0, 12)}`;
 
         let normalizedLocal = await cache.get<any[]>(scoredCacheKey);
 
         if (!normalizedLocal) {
-            let localArticles = await prisma.ambientArticle.findMany({
-                orderBy: { createdAt: 'desc' },
-            });
-
-            // 库空自愈播种
-            if (localArticles.length === 0) {
-                await prisma.ambientArticle.createMany({
-                    data: CURATED_ARTICLES.map((a) => ({
-                        title: a.title,
-                        titleZh: a.titleZh,
-                        level: a.level,
-                        season: a.season,
-                        source: 'curated',
-                        paragraphs: JSON.parse(JSON.stringify(a.paragraphs)),
-                        wordCount: a.paragraphs.reduce((acc, p) => acc + p.en.split(/\s+/).length, 0),
-                    })),
-                });
-                localArticles = await prisma.ambientArticle.findMany({
-                    orderBy: { createdAt: 'desc' },
-                });
-            }
+            const localArticles = await listAmbientArticles();
 
             const userProfile: UserLearningProfile = {
                 userCefr: 'B1',

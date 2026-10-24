@@ -3,17 +3,12 @@ import { prisma } from '@/lib/prisma';
 import { getSession, isPro } from '@/lib/auth';
 import { checkDailyQuota, quotaExceededResponse, recordUsage } from '@/lib/quota';
 import { rateLimit, clientIp, tooManyRequests } from '@/lib/rate-limit';
+import { completeDeepseek, LlmError } from '@/lib/ai/gateway';
+import { cache, CACHE_KEYS } from '@/lib/cache';
 
 export const dynamic = 'force-dynamic';
 
-interface GenerateRequest {
-    /** 文章主题（如 "a quiet library", "the last train home"），留空则随季节自选 */
-    theme?: string;
-    level?: 'A2' | 'B1' | 'B2' | 'C1';
-    season?: string;
-    /** 目标词汇（可选）：用用户最近学的词写故事，实现个性化闭环 */
-    targetWords?: string[];
-}
+const LEVELS = ['A2', 'B1', 'B2', 'C1'] as const;
 
 const SEASON_HINT: Record<string, string> = {
     spring: 'spring rain, new leaves, birds returning',
@@ -63,13 +58,17 @@ export async function POST(request: NextRequest) {
             if (!quota.allowed) return quotaExceededResponse(quota, 'ambientGenerate');
         }
 
-        const body: GenerateRequest = await request.json();
-        const level = body.level || 'B1';
-        const season = body.season && SEASON_HINT[body.season] ? body.season : undefined;
+        // 请求体字段：theme 文章主题（留空则随季节自选）、level CEFR 等级、season 季节、
+        // targetWords 目标词汇（用用户最近学的词写故事，实现个性化闭环）。每个字段都可能是任意 JSON
+        const body = await request.json().catch(() => null);
+        const level = LEVELS.find((l) => l === body?.level) ?? 'B1';
+        const season = typeof body?.season === 'string' && SEASON_HINT[body.season] ? body.season : undefined;
         const themeHint =
-            body.theme?.trim().slice(0, 120) ||
+            (typeof body?.theme === 'string' ? body.theme.trim().slice(0, 120) : '') ||
             (season ? `a quiet scene of ${SEASON_HINT[season]}` : 'a small beautiful moment in everyday life');
-        const words = (body.targetWords || []).filter((w) => /^[a-zA-Z-]+$/.test(w)).slice(0, 10);
+        const words: string[] = Array.isArray(body?.targetWords)
+            ? body.targetWords.filter((w: unknown): w is string => typeof w === 'string' && /^[a-zA-Z-]{1,40}$/.test(w)).slice(0, 10)
+            : [];
 
         const wordInstruction =
             words.length > 0
@@ -95,38 +94,22 @@ Respond with ONLY valid JSON in exactly this shape (no markdown fences, no comme
   ]
 }`;
 
-        const llmRes = await fetch(
-            `${process.env.LLM_BASE_URL || 'https://api.siliconflow.cn/v1'}/chat/completions`,
-            {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${process.env.SILICONFLOW_APIKEY || process.env.DEEPSEEK_APIKEY}`,
-                },
-                body: JSON.stringify({
-                    model: process.env.LLM_MODEL_FAST || process.env.LLM_MODEL || 'deepseek-ai/DeepSeek-V3.2',
-                    messages: [{ role: 'user', content: prompt }],
-                    temperature: 1.1,
-                    max_tokens: 1200,
-                }),
-            },
-        );
-
-        if (!llmRes.ok) {
-            const detail = await llmRes.text().catch(() => '');
-            console.error(`[ambient/generate] LLM request failed (${llmRes.status}): ${detail.slice(0, 300)}`);
-            return NextResponse.json(
-                { error: `LLM request failed (${llmRes.status})` },
-                { status: 502 },
-            );
+        let raw: string;
+        try {
+            raw = await completeDeepseek([{ role: 'user', content: prompt }], {
+                model: process.env.LLM_MODEL_FAST || process.env.LLM_MODEL,
+                temperature: 1.1,
+                maxTokens: 1200,
+            });
+        } catch (e) {
+            console.error('[ambient/generate] LLM request failed:', e);
+            const status = e instanceof LlmError ? e.status : 0;
+            return NextResponse.json({ error: status ? `LLM request failed (${status})` : 'LLM request failed' }, { status: 502 });
         }
-
-        const payload = await llmRes.json();
-        const raw: string = payload?.choices?.[0]?.message?.content ?? '';
         const parsed = extractJson(raw);
 
-        if (!parsed?.title || !Array.isArray(parsed.paragraphs) || parsed.paragraphs.length < 3) {
-            return NextResponse.json({ error: 'LLM returned malformed article', raw: raw.slice(0, 500) }, { status: 502 });
+        if (typeof parsed?.title !== 'string' || !parsed.title.trim() || !Array.isArray(parsed.paragraphs)) {
+            return NextResponse.json({ error: 'LLM returned malformed article' }, { status: 502 });
         }
 
         const paragraphs = parsed.paragraphs
@@ -142,7 +125,7 @@ Respond with ONLY valid JSON in exactly this shape (no markdown fences, no comme
         const created = await prisma.ambientArticle.create({
             data: {
                 title: parsed.title.trim().slice(0, 200),
-                titleZh: parsed.titleZh?.trim().slice(0, 200) ?? null,
+                titleZh: typeof parsed.titleZh === 'string' ? parsed.titleZh.trim().slice(0, 200) : null,
                 level,
                 season: season ?? null,
                 source: 'ai',
@@ -151,8 +134,9 @@ Respond with ONLY valid JSON in exactly this shape (no markdown fences, no comme
             },
         });
 
-        // AmbientArticle 是全局共享库、无用户归属字段，额度按 UsageLog 记
         await recordUsage(session.id, 'ambientGenerate');
+        // /read 的推荐列表按用户缓存 60s，清掉才能马上看到新文章
+        await cache.delete(CACHE_KEYS.scoredArticles(session.id));
 
         return NextResponse.json({
             id: created.id,
