@@ -7,8 +7,10 @@ import {
     ArrowUpRight,
     Check,
     Copy,
+    Github,
     Play,
     Sparkles,
+    Star,
     Volume2,
 } from 'lucide-react';
 import CosmicRotatingBackground from '@/components/CosmicRotatingBackground';
@@ -18,13 +20,16 @@ import TrainingSection from '@/components/welcome/TrainingSection';
 import FeatureGallery from '@/components/welcome/FeatureGallery';
 import LanguageToggle from '@/components/welcome/LanguageToggle';
 
+const SITE_URL = 'https://wordlink.lifeplayertribe.com';
+const REPO_URL = 'https://github.com/orionsheep/wordlink';
+
 export default function HomePage() {
     const t = useTranslations('landing.home');
     const [copied, setCopied] = useState(false);
     const heroVideoRef = useRef<HTMLVideoElement>(null);
 
     const handleCopy = () => {
-        navigator.clipboard.writeText('https://wordlink.study');
+        navigator.clipboard.writeText(SITE_URL);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
     };
@@ -127,8 +132,8 @@ export default function HomePage() {
                     </Link>
                 </div>
 
-                {/* 快捷指令(终端命令,保留英文原文) */}
-                <div className="pt-2 flex items-center justify-center">
+                {/* 快捷指令(终端命令,保留英文原文) + 开源仓库 */}
+                <div className="pt-2 flex flex-col items-center justify-center gap-3">
                     <div
                         onClick={handleCopy}
                         className="inline-flex items-center gap-3 px-5 py-2 rounded-full bg-black/60 border border-white/15 text-xs font-mono text-white/70 hover:text-white cursor-pointer transition-all group backdrop-blur-md"
@@ -137,6 +142,19 @@ export default function HomePage() {
                         <span>{t('terminalHint')}</span>
                         {copied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} className="text-white/40 group-hover:text-white" />}
                     </div>
+                    <a
+                        href={REPO_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-3 pl-5 pr-2 py-1.5 rounded-full bg-black/60 border border-white/15 text-xs font-mono text-white/70 hover:text-white hover:border-white/30 transition-all group backdrop-blur-md"
+                    >
+                        <Github size={13} className="text-white/50 group-hover:text-white" />
+                        <span>github.com/orionsheep/wordlink</span>
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/10 border border-white/10 text-[11px] font-sans text-white/80 group-hover:bg-white/20 group-hover:text-white">
+                            <Star size={11} className="fill-amber-300 text-amber-300" />
+                            {t('githubStar')}
+                        </span>
+                    </a>
                 </div>
             </section>
 
