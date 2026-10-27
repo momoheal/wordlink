@@ -7,6 +7,14 @@ import { extractAccessToken, getJwtExpiry } from '@/lib/supabase/token';
 // expiry — otherwise navigation proceeds without an auth round-trip.
 const REFRESH_WINDOW_MS = 60_000;
 
+// 跳转地址按浏览器实际访问的域名拼：`next start -H 127.0.0.1` 时 request.url 的主机是
+// 监听地址（localhost:3011），直接用会把用户带到 localhost。nginx 会传 Host / X-Forwarded-Proto。
+function redirectTo(request: NextRequest, pathname: string) {
+    const host = request.headers.get('host');
+    const proto = request.headers.get('x-forwarded-proto') || request.nextUrl.protocol.replace(/:$/, '');
+    return NextResponse.redirect(new URL(pathname, host ? `${proto}://${host}` : request.url));
+}
+
 export async function middleware(request: NextRequest) {
     let response = NextResponse.next({ request });
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -21,12 +29,12 @@ export async function middleware(request: NextRequest) {
 
     // 兼容旧链接：/welcome 已升级为首页 Landing Page（/）
     if (pathname === '/welcome' || pathname.startsWith('/welcome/')) {
-        return NextResponse.redirect(new URL('/', request.url));
+        return redirectTo(request, '/');
     }
 
     // 兼容旧链接：认知导航已下线，转到星图工作台（查词在左侧词表）
     if (pathname === '/navigator') {
-        return NextResponse.redirect(new URL('/study', request.url));
+        return redirectTo(request, '/study');
     }
 
     // / 为公开 Landing Page；/study, /immersive, /graph, /ambient, /read, /passport, /quiz, /model 为免登体验（展位演示与评审体验）；应用内数据操作按需校验
@@ -65,7 +73,7 @@ export async function middleware(request: NextRequest) {
     // 受保护路径：没有会话 cookie 直接跳登录，省掉一次远程校验
     const accessToken = extractAccessToken(request.cookies.getAll());
     if (!accessToken) {
-        return NextResponse.redirect(new URL('/login', request.url));
+        return redirectTo(request, '/login');
     }
 
     // token 远未过期：跳过 getUser() 的 Supabase 网络往返，直接放行。
@@ -102,7 +110,7 @@ export async function middleware(request: NextRequest) {
     }
 
     if (!user) {
-        return NextResponse.redirect(new URL('/login', request.url));
+        return redirectTo(request, '/login');
     }
 
     return response;
