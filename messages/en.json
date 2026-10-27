@@ -441,6 +441,7 @@
     "emailNotConfirmed": "Email not confirmed — please check your inbox for the verification link",
     "tooManyAttempts": "Too many attempts. Please try again later",
     "profileUnavailable": "Account profile failed to load. Please refresh and retry",
+    "alreadyRegistered": "This email is already registered. Please log in",
     "networkError": "Network error. Check your connection and try again"
   },
   "ai": {

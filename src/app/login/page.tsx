@@ -2,13 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { Mail, Lock, ArrowLeft, Send, Eye, EyeOff } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useTranslations, useLocale } from 'next-intl';
 
 type AuthMode = 'login' | 'register' | 'forgot' | 'resend';
 
 export default function LoginPage() {
-    const router = useRouter();
     const t = useTranslations();
     const locale = useLocale();
     const [mode, setMode] = useState<AuthMode>('login');
@@ -29,6 +27,7 @@ export default function LoginPage() {
         if (e.includes('email not confirmed')) return t('auth.emailNotConfirmed');
         if (e.includes('too many') || e.includes('rate limit')) return t('auth.tooManyAttempts');
         if (e.includes('profile')) return t('auth.profileUnavailable');
+        if (e.includes('already registered')) return t('auth.alreadyRegistered');
         if (apiError && locale !== 'zh') return apiError;
         return t(fallbackKey);
     };
@@ -38,6 +37,12 @@ export default function LoginPage() {
         const m = err.message.toLowerCase();
         if (m.includes('failed to fetch') || m.includes('networkerror') || m.includes('network request')) return t('auth.networkError');
         return err.message;
+    };
+
+    // 整页跳转而不是 router.push：未登录时 /home 的预取结果是"重定向到 /login"，
+    // 客户端路由会复用这份缓存，刚登录/注册成功的用户又被送回登录页。
+    const goHome = () => {
+        window.location.assign('/home');
     };
 
     const switchMode = (newMode: AuthMode) => {
@@ -80,8 +85,7 @@ export default function LoginPage() {
                 if (typeof window !== 'undefined') {
                     window.dispatchEvent(new CustomEvent('auth-state-changed'));
                 }
-                router.push('/home');
-                router.refresh();
+                goHome();
             } else if (mode === 'register') {
                 const res = await fetch('/api/auth/register', {
                     method: 'POST',
@@ -90,7 +94,11 @@ export default function LoginPage() {
                     body: JSON.stringify({ email, password }),
                 });
                 const data = await res.json();
-                if (!res.ok) throw new Error(mapApiError(data.error, 'auth.registerError'));
+                if (!res.ok) {
+                    // 已注册的邮箱：切到登录表单，邮箱密码都保留，直接点登录即可
+                    if ((data.error || '').toLowerCase().includes('already registered')) setMode('login');
+                    throw new Error(mapApiError(data.error, 'auth.registerError'));
+                }
 
                 if (data.needsEmailConfirmation) {
                     setSuccessMessage(
@@ -103,8 +111,7 @@ export default function LoginPage() {
                 if (typeof window !== 'undefined') {
                     window.dispatchEvent(new CustomEvent('auth-state-changed'));
                 }
-                router.push('/home');
-                router.refresh();
+                goHome();
             } else if (mode === 'forgot') {
                 const res = await fetch('/api/auth/forgot-password', {
                     method: 'POST',

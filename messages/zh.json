@@ -432,6 +432,7 @@
     "emailNotConfirmed": "邮箱尚未验证，请先查收验证邮件",
     "tooManyAttempts": "尝试次数过多，请稍后再试",
     "profileUnavailable": "账号档案加载失败，请刷新重试",
+    "alreadyRegistered": "该邮箱已注册，请直接登录",
     "networkError": "网络异常，请检查连接后重试"
   },
   "ai": {
