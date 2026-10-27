@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 // 允许的源列表
 const ALLOWED_ORIGINS = [
+  'https://wordlink.orionsheep.com',
   'https://wordlink.lifeplayertribe.com',
   'https://echostream.lifeplayertribe.com', // 阅读平台域名
   'http://localhost:3000', // 本地开发

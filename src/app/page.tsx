@@ -20,7 +20,8 @@ import TrainingSection from '@/components/welcome/TrainingSection';
 import FeatureGallery from '@/components/welcome/FeatureGallery';
 import LanguageToggle from '@/components/welcome/LanguageToggle';
 
-const SITE_URL = 'https://wordlink.lifeplayertribe.com';
+// 首页“$ open …”胶囊指向的主站：老域名的访客点这里会被带到新站，运营统一用这个地址
+const SITE_URL = 'https://wordlink.orionsheep.com';
 const REPO_URL = 'https://github.com/orionsheep/wordlink';
 
 export default function HomePage() {
@@ -28,7 +29,9 @@ export default function HomePage() {
     const [copied, setCopied] = useState(false);
     const heroVideoRef = useRef<HTMLVideoElement>(null);
 
-    const handleCopy = () => {
+    const handleCopy = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
         navigator.clipboard.writeText(SITE_URL);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
@@ -134,14 +137,16 @@ export default function HomePage() {
 
                 {/* 快捷指令(终端命令,保留英文原文) + 开源仓库 */}
                 <div className="pt-2 flex flex-col items-center justify-center gap-3">
-                    <div
-                        onClick={handleCopy}
+                    <a
+                        href={SITE_URL}
                         className="inline-flex items-center gap-3 px-5 py-2 rounded-full bg-black/60 border border-white/15 text-xs font-mono text-white/70 hover:text-white cursor-pointer transition-all group backdrop-blur-md"
                     >
                         <span className="text-white/40">$</span>
                         <span>{t('terminalHint')}</span>
-                        {copied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} className="text-white/40 group-hover:text-white" />}
-                    </div>
+                        <button type="button" onClick={handleCopy} aria-label="Copy" className="inline-flex">
+                            {copied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} className="text-white/40 group-hover:text-white" />}
+                        </button>
+                    </a>
                     <a
                         href={REPO_URL}
                         target="_blank"
