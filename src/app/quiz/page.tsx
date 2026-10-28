@@ -41,19 +41,15 @@ export default function QuizMenuPage() {
   const [selectedGroupIndex, setSelectedGroupIndex] = useState<number>(0);
   const [wordCount, setWordCount] = useState<number>(20);
 
-  // Fetch libraries on mount (fetches both root user libs and syllabus files)
+  // Fetch libraries on mount: the user's own libraries, then every system library file
   useEffect(() => {
     async function loadAllLibraries() {
       try {
-        const [rootRes, syllabusRes] = await Promise.all([
-          fetch('/api/libraries').then((r) => (r.ok ? r.json() : [])),
-          fetch('/api/libraries?path=考试考纲').then((r) => (r.ok ? r.json() : [])),
-        ]);
-
-        // The API appends the user's own libraries to every listing; keep the root's copy only
+        // flat=true walks every folder under data/word_library (考试考纲, EAP, ...) and lists the user's libraries once
+        const items: LibraryItem[] = await fetch('/api/libraries?flat=true').then((r) => (r.ok ? r.json() : []));
         const allFiles: LibraryItem[] = [
-          ...rootRes.filter((item: LibraryItem) => item.type === 'file'),
-          ...syllabusRes.filter((item: LibraryItem) => item.type === 'file' && item.source !== 'user'),
+          ...items.filter((item) => item.source === 'user'),
+          ...items.filter((item) => item.type === 'file' && item.source !== 'user'),
         ];
 
         setLibraries(allFiles);
@@ -197,7 +193,8 @@ export default function QuizMenuPage() {
                 >
                   {libraries.map((lib) => (
                     <option key={lib.path} value={lib.path}>
-                      {lib.name.replace(/\.csv$/, '').replace(/^考试考纲\//, '')}
+                      {/* System files keep their folder ("EAP/1-第一学期") so same-named files stay distinguishable */}
+                      {(lib.source === 'user' ? lib.name : lib.path).replace(/\.csv$/, '').replace(/^考试考纲\//, '')}
                     </option>
                   ))}
                 </select>
